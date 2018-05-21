@@ -18,10 +18,15 @@ import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.logging.FLog;
 import com.facebook.common.references.CloseableReference;
+import com.facebook.common.time.RealtimeSinceBootClock;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawable.base.DrawableWithCaches;
+import com.facebook.drawee.backends.pipeline.info.ForwardingImageOriginListener;
 import com.facebook.drawee.backends.pipeline.info.ImageOrigin;
 import com.facebook.drawee.backends.pipeline.info.ImageOriginListener;
+import com.facebook.drawee.backends.pipeline.info.ImageOriginRequestListener;
+import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener;
+import com.facebook.drawee.backends.pipeline.info.ImagePerfMonitor;
 import com.facebook.drawee.components.DeferredReleaser;
 import com.facebook.drawee.controller.AbstractDraweeController;
 import com.facebook.drawee.debug.DebugControllerOverlayDrawable;
@@ -39,6 +44,10 @@ import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.image.ImageInfo;
+import com.facebook.imagepipeline.listener.ForwardingRequestListener;
+import com.facebook.imagepipeline.listener.RequestListener;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -60,7 +69,7 @@ public class PipelineDraweeController
   @Nullable
   private final ImmutableList<DrawableFactory> mGlobalDrawableFactories;
 
-  private @Nullable MemoryCache<CacheKey, CloseableImage> mMemoryCache;
+  private final @Nullable MemoryCache<CacheKey, CloseableImage> mMemoryCache;
 
   private CacheKey mCacheKey;
 
@@ -71,6 +80,12 @@ public class PipelineDraweeController
 
   // Drawable factories that are unique for a given image request
   private @Nullable ImmutableList<DrawableFactory> mCustomDrawableFactories;
+
+  private @Nullable ImagePerfMonitor mImagePerfMonitor;
+
+  @GuardedBy("this")
+  @Nullable
+  private Set<RequestListener> mRequestListeners;
 
   @GuardedBy("this")
   @Nullable
@@ -123,46 +138,17 @@ public class PipelineDraweeController
   }
 
   public PipelineDraweeController(
-          Resources resources,
-          DeferredReleaser deferredReleaser,
-          DrawableFactory animatedDrawableFactory,
-          Executor uiThreadExecutor,
-          MemoryCache<CacheKey, CloseableImage> memoryCache,
-          Supplier<DataSource<CloseableReference<CloseableImage>>> dataSourceSupplier,
-          String id,
-          CacheKey cacheKey,
-          Object callerContext) {
-    this(
-        resources,
-        deferredReleaser,
-        animatedDrawableFactory,
-        uiThreadExecutor,
-        memoryCache,
-        dataSourceSupplier,
-        id,
-        cacheKey,
-        callerContext,
-        null);
-  }
-
-  public PipelineDraweeController(
       Resources resources,
       DeferredReleaser deferredReleaser,
       DrawableFactory animatedDrawableFactory,
       Executor uiThreadExecutor,
-      MemoryCache<CacheKey, CloseableImage> memoryCache,
-      Supplier<DataSource<CloseableReference<CloseableImage>>> dataSourceSupplier,
-      String id,
-      CacheKey cacheKey,
-      Object callerContext,
+      @Nullable MemoryCache<CacheKey, CloseableImage> memoryCache,
       @Nullable ImmutableList<DrawableFactory> globalDrawableFactories) {
-    super(deferredReleaser, uiThreadExecutor, id, callerContext);
+    super(deferredReleaser, uiThreadExecutor, null, null);
     mResources = resources;
     mAnimatedDrawableFactory = animatedDrawableFactory;
-    mMemoryCache = memoryCache;
-    mCacheKey = cacheKey;
     mGlobalDrawableFactories = globalDrawableFactories;
-    init(dataSourceSupplier);
+    mMemoryCache = memoryCache;
   }
 
   /**
@@ -180,12 +166,27 @@ public class PipelineDraweeController
       CacheKey cacheKey,
       Object callerContext,
       @Nullable ImmutableList<DrawableFactory> customDrawableFactories,
-      ImageOriginListener imageOriginListener) {
+      @Nullable ImageOriginListener imageOriginListener) {
     super.initialize(id, callerContext);
     init(dataSourceSupplier);
     mCacheKey = cacheKey;
     setCustomDrawableFactories(customDrawableFactories);
-    setImageOriginListener(imageOriginListener);
+    clearImageOriginListeners();
+    addImageOriginListener(imageOriginListener);
+  }
+
+  protected synchronized void initializePerformanceMonitoring(
+      @Nullable ImagePerfDataListener imagePerfDataListener) {
+    if (mImagePerfMonitor != null) {
+      mImagePerfMonitor.reset();
+    }
+    if (imagePerfDataListener != null) {
+      if (mImagePerfMonitor == null) {
+        mImagePerfMonitor = new ImagePerfMonitor(RealtimeSinceBootClock.get(), this);
+      }
+      mImagePerfMonitor.addImagePerfDataListener(imagePerfDataListener);
+      mImagePerfMonitor.setEnabled(true);
+    }
   }
 
   public void setDrawDebugOverlay(boolean drawDebugOverlay) {
@@ -197,9 +198,47 @@ public class PipelineDraweeController
     mCustomDrawableFactories = customDrawableFactories;
   }
 
-  public void setImageOriginListener(@Nullable ImageOriginListener imageOriginListener) {
-    synchronized (this) {
+  public synchronized void addRequestListener(RequestListener requestListener) {
+    if (mRequestListeners == null) {
+      mRequestListeners = new HashSet<>();
+    }
+    mRequestListeners.add(requestListener);
+  }
+
+  public synchronized void removeRequestListener(RequestListener requestListener) {
+    if (mRequestListeners == null) {
+      return;
+    }
+    mRequestListeners.remove(requestListener);
+  }
+
+  public synchronized void addImageOriginListener(ImageOriginListener imageOriginListener) {
+    if (mImageOriginListener instanceof ForwardingImageOriginListener) {
+      ((ForwardingImageOriginListener) mImageOriginListener)
+          .addImageOriginListener(imageOriginListener);
+    } else if (mImageOriginListener != null) {
+      mImageOriginListener =
+          new ForwardingImageOriginListener(mImageOriginListener, imageOriginListener);
+    } else {
       mImageOriginListener = imageOriginListener;
+    }
+  }
+
+  public synchronized void removeImageOriginListener(ImageOriginListener imageOriginListener) {
+    if (mImageOriginListener instanceof ForwardingImageOriginListener) {
+      ((ForwardingImageOriginListener) mImageOriginListener)
+          .removeImageOriginListener(imageOriginListener);
+    } else if (mImageOriginListener != null) {
+      mImageOriginListener =
+          new ForwardingImageOriginListener(mImageOriginListener, imageOriginListener);
+    } else {
+      mImageOriginListener = imageOriginListener;
+    }
+  }
+
+  protected void clearImageOriginListeners() {
+    synchronized (this) {
+      mImageOriginListener = null;
     }
   }
 
@@ -215,6 +254,22 @@ public class PipelineDraweeController
 
   protected CacheKey getCacheKey() {
     return mCacheKey;
+  }
+
+  @Nullable
+  public synchronized RequestListener getRequestListener() {
+    RequestListener imageOriginRequestListener = null;
+    if (mImageOriginListener != null) {
+      imageOriginRequestListener = new ImageOriginRequestListener(getId(), mImageOriginListener);
+    }
+    if (mRequestListeners != null) {
+      ForwardingRequestListener requestListener = new ForwardingRequestListener(mRequestListeners);
+      if (imageOriginRequestListener != null) {
+        requestListener.addRequestListener(imageOriginRequestListener);
+      }
+      return requestListener;
+    }
+    return imageOriginRequestListener;
   }
 
   @Override
@@ -361,6 +416,10 @@ public class PipelineDraweeController
         mImageOriginListener.onImageLoaded(id, ImageOrigin.MEMORY_BITMAP, true);
       }
     }
+  }
+
+  protected Supplier<DataSource<CloseableReference<CloseableImage>>> getDataSourceSupplier() {
+    return mDataSourceSupplier;
   }
 
   @Override

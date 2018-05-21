@@ -63,6 +63,7 @@ public class ImagePipelineTest {
 
   private Supplier<Boolean> mPrefetchEnabledSupplier;
   private Supplier<Boolean> mSuppressBitmapPrefetchingSupplier;
+  private Supplier<Boolean> mLazyDataSourceSupplier;
   private ImagePipeline mImagePipeline;
   private MemoryCache<CacheKey, CloseableImage> mBitmapMemoryCache;
   private MemoryCache<CacheKey, PooledByteBuffer> mEncodedMemoryCache;
@@ -77,8 +78,10 @@ public class ImagePipelineTest {
     MockitoAnnotations.initMocks(this);
     mPrefetchEnabledSupplier = mock(Supplier.class);
     mSuppressBitmapPrefetchingSupplier = mock(Supplier.class);
+    mLazyDataSourceSupplier = mock(Supplier.class);
     when(mPrefetchEnabledSupplier.get()).thenReturn(true);
     when(mSuppressBitmapPrefetchingSupplier.get()).thenReturn(false);
+    when(mLazyDataSourceSupplier.get()).thenReturn(false);
     mRequestListener1 = mock(RequestListener.class);
     mRequestListener2 = mock(RequestListener.class);
     mBitmapMemoryCache = mock(MemoryCache.class);
@@ -96,7 +99,8 @@ public class ImagePipelineTest {
         mSmallImageDiskStorageCache,
         mCacheKeyFactory,
         mThreadHandoffProducerQueue,
-        mSuppressBitmapPrefetchingSupplier);
+        mSuppressBitmapPrefetchingSupplier,
+        mLazyDataSourceSupplier);
 
     when(mImageRequest.getProgressiveRenderingEnabled()).thenReturn(true);
     when(mImageRequest.getPriority()).thenReturn(Priority.HIGH);
