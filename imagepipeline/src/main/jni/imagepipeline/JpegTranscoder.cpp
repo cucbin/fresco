@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -76,15 +76,15 @@ static JNINativeMethod gJpegTranscoderMethods[] = {
 };
 
 bool registerJpegTranscoderMethods(JNIEnv* env) {
-  auto jpegTranscoderClass = env->FindClass(
-      "com/facebook/imagepipeline/nativecode/JpegTranscoder");
-  if (jpegTranscoderClass == nullptr) {
-    LOGE("could not find JpegTranscoder class");
+  auto nativeJpegTranscoderClass = env->FindClass(
+      "com/facebook/imagepipeline/nativecode/NativeJpegTranscoder");
+  if (nativeJpegTranscoderClass == nullptr) {
+    LOGE("could not find NativeJpegTranscoder class");
     return false;
   }
 
   auto result = env->RegisterNatives(
-      jpegTranscoderClass,
+      nativeJpegTranscoderClass,
       gJpegTranscoderMethods,
       std::extent<decltype(gJpegTranscoderMethods)>::value);
 

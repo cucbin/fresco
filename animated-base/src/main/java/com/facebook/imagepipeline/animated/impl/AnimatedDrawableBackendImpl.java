@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -233,10 +233,7 @@ public class AnimatedDrawableBackendImpl implements AnimatedDrawableBackend {
       mRenderSrcRect.set(0, 0, frameWidth, frameHeight);
       mRenderDstRect.set(0, 0, frameWidth, frameHeight);
 
-      float xScale = (float) mRenderedBounds.width() / (float) mAnimatedImage.getWidth();
-      float yScale = (float) mRenderedBounds.height() / (float) mAnimatedImage.getHeight();
       canvas.save();
-      canvas.scale(xScale, yScale);
       canvas.translate(xOffset, yOffset);
       canvas.drawBitmap(mTempBitmap, mRenderSrcRect, mRenderDstRect, null);
       canvas.restore();

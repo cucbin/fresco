@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -40,10 +40,12 @@ public class ForwardingImageOriginListener implements ImageOriginListener {
     final int numberOfListeners = mImageOriginListeners.size();
     for (int i = 0; i < numberOfListeners; i++) {
       ImageOriginListener listener = mImageOriginListeners.get(i);
-      try {
-        listener.onImageLoaded(controllerId, imageOrigin, successful);
-      } catch (Exception e) {
-        FLog.e(TAG, "InternalListener exception in onImageLoaded", e);
+      if (listener != null) {
+        try {
+          listener.onImageLoaded(controllerId, imageOrigin, successful);
+        } catch (Exception e) {
+          FLog.e(TAG, "InternalListener exception in onImageLoaded", e);
+        }
       }
     }
   }

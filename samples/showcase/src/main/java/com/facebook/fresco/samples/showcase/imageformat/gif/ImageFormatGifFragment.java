@@ -23,12 +23,15 @@ import android.widget.BaseAdapter;
 import android.widget.CompoundButton;
 import android.widget.Spinner;
 import android.widget.TextView;
+import com.facebook.animated.giflite.GifDecoder;
 import com.facebook.drawee.backends.pipeline.Fresco;
-import com.facebook.drawee.interfaces.DraweeController;
+import com.facebook.drawee.backends.pipeline.PipelineDraweeControllerBuilder;
 import com.facebook.drawee.view.SimpleDraweeView;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
 import com.facebook.fresco.samples.showcase.R;
 import com.facebook.fresco.samples.showcase.misc.CheckerBoardDrawable;
+import com.facebook.imagepipeline.common.ImageDecodeOptions;
+import com.facebook.imagepipeline.request.ImageRequestBuilder;
 
 /**
  * GIF example that illustrates how to display a simple GIF file
@@ -48,7 +51,9 @@ public class ImageFormatGifFragment extends BaseShowcaseFragment {
       new Entry(R.string.format_gif_label_large, URI_GIF_L),
   };
 
+  private Spinner mSpinner;
   private SimpleDraweeView mSimpleDraweeView;
+  private @Nullable GifDecoder mGifDecoder;
 
   @Nullable
   @Override
@@ -74,29 +79,77 @@ public class ImageFormatGifFragment extends BaseShowcaseFragment {
       }
     });
 
-    final Spinner spinner = (Spinner) view.findViewById(R.id.spinner);
-    spinner.setAdapter(new SimpleUriListAdapter());
-    spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+    final SwitchCompat switchAspect = (SwitchCompat) view.findViewById(R.id.switch_aspect_ratio);
+    switchAspect.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
       @Override
-      public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-        final Entry spinnerEntry = SPINNER_ENTRIES[spinner.getSelectedItemPosition()];
-        setAnimationUri(spinnerEntry.uri);
-      }
-
-      @Override
-      public void onNothingSelected(AdapterView<?> parent) {
+      public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+        ViewGroup.LayoutParams layoutParams = mSimpleDraweeView.getLayoutParams();
+        layoutParams.height = layoutParams.width * (isChecked ? 2 : 1);
+        mSimpleDraweeView.setLayoutParams(layoutParams);
       }
     });
-    spinner.setSelection(0);
+
+    mSpinner = (Spinner) view.findViewById(R.id.spinner);
+    mSpinner.setAdapter(new SimpleUriListAdapter());
+    mSpinner.setOnItemSelectedListener(
+        new AdapterView.OnItemSelectedListener() {
+          @Override
+          public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            refreshAnimation();
+          }
+
+          @Override
+          public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    mSpinner.setSelection(0);
+
+    final Spinner decoderSpinner = (Spinner) view.findViewById(R.id.spinner_select_decoder);
+    decoderSpinner.setOnItemSelectedListener(
+        new AdapterView.OnItemSelectedListener() {
+          @Override
+          public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            switch (position) {
+              case 0:
+                mGifDecoder = null;
+                break;
+              case 1:
+                mGifDecoder = new GifDecoder(true /* useSimpleDecoder */);
+                break;
+              case 2:
+                mGifDecoder = new GifDecoder(false /* useSimpleDecoder */);
+                break;
+              default:
+                throw new IllegalArgumentException("Unknown decoder selected");
+            }
+            refreshAnimation();
+          }
+
+          @Override
+          public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    decoderSpinner.setSelection(0);
+  }
+
+  private void refreshAnimation() {
+    final Entry spinnerEntry = SPINNER_ENTRIES[mSpinner.getSelectedItemPosition()];
+    setAnimationUri(spinnerEntry.uri);
   }
 
   private void setAnimationUri(Uri uri) {
-    final DraweeController controller = Fresco.newDraweeControllerBuilder()
-        .setAutoPlayAnimations(true)
-        .setOldController(mSimpleDraweeView.getController())
-        .setUri(uri)
-        .build();
-    mSimpleDraweeView.setController(controller);
+    final PipelineDraweeControllerBuilder controllerBuilder =
+        Fresco.newDraweeControllerBuilder()
+            .setAutoPlayAnimations(true)
+            .setOldController(mSimpleDraweeView.getController());
+    if (mGifDecoder != null) {
+      controllerBuilder.setImageRequest(
+          ImageRequestBuilder.newBuilderWithSource(uri)
+              .setImageDecodeOptions(
+                  ImageDecodeOptions.newBuilder().setCustomImageDecoder(mGifDecoder).build())
+              .build());
+    } else {
+      controllerBuilder.setUri(uri).build();
+    }
+    mSimpleDraweeView.setController(controllerBuilder.build());
   }
 
   @Override

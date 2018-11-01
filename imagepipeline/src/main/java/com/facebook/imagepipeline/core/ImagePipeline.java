@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,10 +10,10 @@ package com.facebook.imagepipeline.core;
 import android.net.Uri;
 import bolts.Continuation;
 import bolts.Task;
-import com.android.internal.util.Predicate;
 import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
+import com.facebook.common.internal.Predicate;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
@@ -35,6 +35,7 @@ import com.facebook.imagepipeline.producers.SettableProducerContext;
 import com.facebook.imagepipeline.producers.ThreadHandoffProducerQueue;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.request.ImageRequestBuilder;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -131,6 +132,34 @@ public class ImagePipeline {
    * DataSource representing the pending results of the task.
    *
    * @param imageRequest the request to submit (what to execute).
+   * @param callerContext the caller context of the caller of data source supplier
+   * @param requestLevel which level to look down until for the image
+   * @param requestListener additional image request listener independent of ImageRequest listeners
+   * @return a DataSource representing pending results and completion of the request
+   */
+  public Supplier<DataSource<CloseableReference<CloseableImage>>> getDataSourceSupplier(
+      final ImageRequest imageRequest,
+      final Object callerContext,
+      final ImageRequest.RequestLevel requestLevel,
+      final @Nullable RequestListener requestListener) {
+    return new Supplier<DataSource<CloseableReference<CloseableImage>>>() {
+      @Override
+      public DataSource<CloseableReference<CloseableImage>> get() {
+        return fetchDecodedImage(imageRequest, callerContext, requestLevel, requestListener);
+      }
+
+      @Override
+      public String toString() {
+        return Objects.toStringHelper(this).add("uri", imageRequest.getSourceUri()).toString();
+      }
+    };
+  }
+
+  /**
+   * Returns a DataSource supplier that will on get submit the request for execution and return a
+   * DataSource representing the pending results of the task.
+   *
+   * @param imageRequest the request to submit (what to execute).
    * @return a DataSource representing pending results and completion of the request
    */
   public Supplier<DataSource<CloseableReference<PooledByteBuffer>>>
@@ -181,6 +210,23 @@ public class ImagePipeline {
       ImageRequest imageRequest,
       Object callerContext) {
     return fetchDecodedImage(imageRequest, callerContext, ImageRequest.RequestLevel.FULL_FETCH);
+  }
+
+  /**
+   * Submits a request for execution and returns a DataSource representing the pending decoded
+   * image(s).
+   *
+   * <p>The returned DataSource must be closed once the client has finished with it.
+   *
+   * @param imageRequest the request to submit
+   * @param callerContext the caller context for image request
+   * @param requestListener additional image request listener independent of ImageRequest listeners
+   * @return a DataSource representing the pending decoded image(s)
+   */
+  public DataSource<CloseableReference<CloseableImage>> fetchDecodedImage(
+      ImageRequest imageRequest, Object callerContext, @Nullable RequestListener requestListener) {
+    return fetchDecodedImage(
+        imageRequest, callerContext, ImageRequest.RequestLevel.FULL_FETCH, requestListener);
   }
 
   /**
@@ -246,6 +292,22 @@ public class ImagePipeline {
   public DataSource<CloseableReference<PooledByteBuffer>> fetchEncodedImage(
       ImageRequest imageRequest,
       Object callerContext) {
+    return fetchEncodedImage(imageRequest, callerContext, null);
+  }
+
+  /**
+   * Submits a request for execution and returns a DataSource representing the pending encoded
+   * image(s).
+   *
+   * <p>The ResizeOptions in the imageRequest will be ignored for this fetch
+   *
+   * <p>The returned DataSource must be closed once the client has finished with it.
+   *
+   * @param imageRequest the request to submit
+   * @return a DataSource representing the pending encoded image(s)
+   */
+  public DataSource<CloseableReference<PooledByteBuffer>> fetchEncodedImage(
+      ImageRequest imageRequest, Object callerContext, @Nullable RequestListener requestListener) {
     Preconditions.checkNotNull(imageRequest.getSourceUri());
     try {
       Producer<CloseableReference<PooledByteBuffer>> producerSequence =
@@ -266,7 +328,7 @@ public class ImagePipeline {
           imageRequest,
           ImageRequest.RequestLevel.FULL_FETCH,
           callerContext,
-          null);
+          requestListener);
     } catch (Exception exception) {
       return DataSources.immediateFailedDataSource(exception);
     }
@@ -563,6 +625,42 @@ public class ImagePipeline {
             });
     return dataSource;
   }
+/**
+ * @return {@link CacheKey} for doing bitmap cache lookups in the pipeline.
+ */
+  @Nullable
+  public CacheKey getCacheKey(ImageRequest imageRequest, Object callerContext) {
+    final CacheKeyFactory cacheKeyFactory = mCacheKeyFactory;
+    CacheKey cacheKey = null;
+    if (cacheKeyFactory != null && imageRequest != null) {
+      if (imageRequest.getPostprocessor() != null) {
+        cacheKey = cacheKeyFactory.getPostprocessedBitmapCacheKey(imageRequest, callerContext);
+      } else {
+        cacheKey = cacheKeyFactory.getBitmapCacheKey(imageRequest, callerContext);
+      }
+    }
+    return cacheKey;
+  }
+
+  /**
+   * Returns a reference to the cached image
+   *
+   * @param cacheKey
+   * @return a closeable reference or null if image was not present in cache
+   */
+  @Nullable
+  public CloseableReference<CloseableImage> getCachedImage(@Nullable CacheKey cacheKey) {
+    MemoryCache<CacheKey, CloseableImage> memoryCache = mBitmapMemoryCache;
+    if (memoryCache == null || cacheKey == null) {
+      return null;
+    }
+    CloseableReference<CloseableImage> closeableImage = memoryCache.get(cacheKey);
+    if (closeableImage != null && !closeableImage.get().getQualityInfo().isOfFullQuality()) {
+      closeableImage.close();
+      return null;
+    }
+    return closeableImage;
+  }
 
   private <T> DataSource<CloseableReference<T>> submitFetchRequest(
       Producer<CloseableReference<T>> producerSequence,
@@ -570,14 +668,16 @@ public class ImagePipeline {
       ImageRequest.RequestLevel lowestPermittedRequestLevelOnSubmit,
       Object callerContext,
       @Nullable RequestListener requestListener) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("ImagePipeline#submitFetchRequest");
+    }
     final RequestListener finalRequestListener =
         getRequestListenerForRequest(imageRequest, requestListener);
 
     try {
       ImageRequest.RequestLevel lowestPermittedRequestLevel =
           ImageRequest.RequestLevel.getMax(
-              imageRequest.getLowestPermittedRequestLevel(),
-              lowestPermittedRequestLevelOnSubmit);
+              imageRequest.getLowestPermittedRequestLevel(), lowestPermittedRequestLevelOnSubmit);
       SettableProducerContext settableProducerContext =
           new SettableProducerContext(
               imageRequest,
@@ -587,13 +687,16 @@ public class ImagePipeline {
               lowestPermittedRequestLevel,
               /* isPrefetch */ false,
               imageRequest.getProgressiveRenderingEnabled()
-                  || imageRequest.getMediaVariations() != null
                   || !UriUtil.isNetworkUri(imageRequest.getSourceUri()),
               imageRequest.getPriority());
       return CloseableProducerToDataSourceAdapter.create(
           producerSequence, settableProducerContext, finalRequestListener);
     } catch (Exception exception) {
       return DataSources.immediateFailedDataSource(exception);
+    } finally {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
     }
   }
 

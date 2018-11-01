@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,6 +15,7 @@ import javax.annotation.Nullable;
 public class ImagePerfState {
 
   // General image metadata
+  private @Nullable String mControllerId;
   private @Nullable String mRequestId;
   private @Nullable ImageRequest mImageRequest;
   private @Nullable Object mCallerContext;
@@ -25,16 +26,26 @@ public class ImagePerfState {
   private long mControllerIntermediateImageSetTimeMs = UNSET;
   private long mControllerFinalImageSetTimeMs = UNSET;
   private long mControllerFailureTimeMs = UNSET;
+  private long mControllerCancelTimeMs = UNSET;
 
   // Image request timings
   private long mImageRequestStartTimeMs = UNSET;
   private long mImageRequestEndTimeMs = UNSET;
 
   // Image pipeline information
-  private @ImageOrigin int mImageOrigin = ImageOrigin.UNKNOWN;
-  private boolean mIsCanceled;
-  private boolean mIsSuccessful;
+  private @ImageOrigin int mImageOrigin = UNSET;
   private boolean mIsPrefetch;
+
+  // On screen information
+  private int mOnScreenWidthPx = UNSET;
+  private int mOnScreenHeightPx = UNSET;
+
+  // Internal parameters
+  private @ImageLoadStatus int mImageLoadStatus = ImageLoadStatus.UNKNOWN;
+  // Visibility
+  private @VisibilityState int mVisibilityState = VisibilityState.UNKNOWN;
+  private long mVisibilityEventTimeMs = UNSET;
+  private long mInvisibilityEventTimeMs = UNSET;
 
   public void reset() {
     mRequestId = null;
@@ -45,14 +56,35 @@ public class ImagePerfState {
     mControllerSubmitTimeMs = UNSET;
     mControllerFinalImageSetTimeMs = UNSET;
     mControllerFailureTimeMs = UNSET;
+    mControllerCancelTimeMs = UNSET;
 
     mImageRequestStartTimeMs = UNSET;
     mImageRequestEndTimeMs = UNSET;
 
     mImageOrigin = ImageOrigin.UNKNOWN;
-    mIsCanceled = false;
-    mIsSuccessful = false;
     mIsPrefetch = false;
+
+    mOnScreenWidthPx = UNSET;
+    mOnScreenHeightPx = UNSET;
+
+    mImageLoadStatus = ImageLoadStatus.UNKNOWN;
+
+    mVisibilityState = VisibilityState.UNKNOWN;
+    mVisibilityEventTimeMs = UNSET;
+    mInvisibilityEventTimeMs = UNSET;
+  }
+
+  public void setImageLoadStatus(@ImageLoadStatus int imageLoadStatus) {
+    mImageLoadStatus = imageLoadStatus;
+  }
+
+  @ImageLoadStatus
+  public int getImageLoadStatus() {
+    return mImageLoadStatus;
+  }
+
+  public void setControllerId(@Nullable String controllerId) {
+    mControllerId = controllerId;
   }
 
   public void setRequestId(@Nullable String requestId) {
@@ -83,6 +115,10 @@ public class ImagePerfState {
     mControllerFailureTimeMs = controllerFailureTimeMs;
   }
 
+  public void setControllerCancelTimeMs(long controllerCancelTimeMs) {
+    mControllerCancelTimeMs = controllerCancelTimeMs;
+  }
+
   public void setImageRequestStartTimeMs(long imageRequestStartTimeMs) {
     mImageRequestStartTimeMs = imageRequestStartTimeMs;
   }
@@ -91,16 +127,16 @@ public class ImagePerfState {
     mImageRequestEndTimeMs = imageRequestEndTimeMs;
   }
 
+  public void setVisibilityEventTimeMs(long visibilityEventTimeMs) {
+    mVisibilityEventTimeMs = visibilityEventTimeMs;
+  }
+
+  public void setInvisibilityEventTimeMs(long invisibilityEventTimeMs) {
+    mInvisibilityEventTimeMs = invisibilityEventTimeMs;
+  }
+
   public void setImageOrigin(@ImageOrigin int imageOrigin) {
     mImageOrigin = imageOrigin;
-  }
-
-  public void setCanceled(boolean canceled) {
-    mIsCanceled = canceled;
-  }
-
-  public void setSuccessful(boolean successful) {
-    mIsSuccessful = successful;
   }
 
   public void setPrefetch(boolean prefetch) {
@@ -111,8 +147,21 @@ public class ImagePerfState {
     mImageInfo = imageInfo;
   }
 
+  public void setOnScreenWidth(int onScreenWidthPx) {
+    mOnScreenWidthPx = onScreenWidthPx;
+  }
+
+  public void setOnScreenHeight(int onScreenHeightPx) {
+    mOnScreenHeightPx = onScreenHeightPx;
+  }
+
+  public void setVisible(boolean visible) {
+    mVisibilityState = visible ? VisibilityState.VISIBLE : VisibilityState.INVISIBLE;
+  }
+
   public ImagePerfData snapshot() {
     return new ImagePerfData(
+        mControllerId,
         mRequestId,
         mImageRequest,
         mCallerContext,
@@ -121,11 +170,15 @@ public class ImagePerfState {
         mControllerIntermediateImageSetTimeMs,
         mControllerFinalImageSetTimeMs,
         mControllerFailureTimeMs,
+        mControllerCancelTimeMs,
         mImageRequestStartTimeMs,
         mImageRequestEndTimeMs,
         mImageOrigin,
-        mIsCanceled,
-        mIsSuccessful,
-        mIsPrefetch);
+        mIsPrefetch,
+        mOnScreenWidthPx,
+        mOnScreenHeightPx,
+        mVisibilityState,
+        mVisibilityEventTimeMs,
+        mInvisibilityEventTimeMs);
   }
 }

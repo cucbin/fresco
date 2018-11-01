@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -214,6 +214,7 @@ public class RoundedCornersDrawable extends ForwardingDrawable implements Rounde
     mTempRectangle.set(getBounds());
 
     mTempRectangle.inset(mPadding, mPadding);
+    mPath.addRect(mTempRectangle, Path.Direction.CW);
     if (mIsCircle) {
       mPath.addCircle(
               mTempRectangle.centerX(),
@@ -275,7 +276,7 @@ public class RoundedCornersDrawable extends ForwardingDrawable implements Rounde
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(mOverlayColor);
         mPaint.setStrokeWidth(0f);
-        mPath.setFillType(Path.FillType.INVERSE_EVEN_ODD);
+        mPath.setFillType(Path.FillType.EVEN_ODD);
         canvas.drawPath(mPath, mPaint);
 
         if (mIsCircle) {

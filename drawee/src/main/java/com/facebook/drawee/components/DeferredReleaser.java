@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -40,14 +40,14 @@ public class DeferredReleaser {
   }
 
   public interface Releasable {
-    public void release();
+    void release();
   }
 
   private final Set<Releasable> mPendingReleasables;
   private final Handler mUiHandler;
 
   public DeferredReleaser() {
-    mPendingReleasables =  new HashSet<Releasable>();
+    mPendingReleasables = new HashSet<>();
     mUiHandler = new Handler(Looper.getMainLooper());
   }
 

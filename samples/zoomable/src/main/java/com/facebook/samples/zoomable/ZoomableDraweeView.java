@@ -55,6 +55,9 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
   private GestureDetector mTapGestureDetector;
   private boolean mAllowTouchInterceptionWhileZoomed = true;
 
+  private boolean mIsDialtoneEnabled = false;
+  private boolean mZoomingEnabled = true;
+
   private final ControllerListener mControllerListener = new BaseControllerListener<Object>() {
     @Override
     public void onFinalImageSet(
@@ -123,6 +126,10 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
     mZoomableController = createZoomableController();
     mZoomableController.setListener(mZoomableListener);
     mTapGestureDetector = new GestureDetector(getContext(), mTapListenerWrapper);
+  }
+
+  public void setIsDialtoneEnabled(boolean isDialtoneEnabled) {
+    mIsDialtoneEnabled = isDialtoneEnabled;
   }
 
   /**
@@ -211,6 +218,11 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
     mTapGestureDetector.setIsLongpressEnabled(enabled);
   }
 
+  public void setZoomingEnabled(boolean zoomingEnabled) {
+    mZoomingEnabled = zoomingEnabled;
+    mZoomableController.setEnabled(false);
+  }
+
   /**
    * Sets the image controller.
    */
@@ -293,7 +305,7 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
   public boolean onTouchEvent(MotionEvent event) {
     int a = event.getActionMasked();
     FLog.v(getLogTag(), "onTouchEvent: %d, view %x, received", a, this.hashCode());
-    if (mTapGestureDetector.onTouchEvent(event)) {
+    if (!mIsDialtoneEnabled && mTapGestureDetector.onTouchEvent(event)) {
       FLog.v(
           getLogTag(),
           "onTouchEvent: %d, view %x, handled by tap gesture detector",
@@ -302,7 +314,7 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
       return true;
     }
 
-    if (mZoomableController.onTouchEvent(event)) {
+    if (!mIsDialtoneEnabled && mZoomableController.onTouchEvent(event)) {
       FLog.v(
           getLogTag(),
           "onTouchEvent: %d, view %x, handled by zoomable controller",
@@ -364,7 +376,7 @@ public class ZoomableDraweeView extends DraweeView<GenericDraweeHierarchy>
 
   private void onFinalImageSet() {
     FLog.v(getLogTag(), "onFinalImageSet: view %x", this.hashCode());
-    if (!mZoomableController.isEnabled()) {
+    if (!mZoomableController.isEnabled() && mZoomingEnabled) {
       mZoomableController.setEnabled(true);
       updateZoomableControllerBounds();
     }

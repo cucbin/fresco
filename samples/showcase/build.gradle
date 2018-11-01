@@ -27,7 +27,20 @@ android {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-showcase.pro'
         }
+        debug {
+            minifyEnabled false
+        }
+        instrumentation {
+            initWith debug
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-showcase.pro'
+            testProguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-showcase.pro', 'proguard-test.pro'
+            matchingFallbacks = ['debug']
+        }
     }
+
+    testBuildType "instrumentation"
+
 
     flavorDimensions "main"
     productFlavors {
@@ -37,15 +50,7 @@ android {
             dimension "main"
             minSdkVersion 21
         }
-
         internal {
-            buildTypes {
-                debug {
-                    minifyEnabled true
-                    proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-showcase.pro'
-                    testProguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-showcase.pro', 'proguard-test.pro'
-                }
-            }
         }
     }
 
@@ -58,7 +63,7 @@ android {
         abi {
             enable true
             reset()
-            include 'x86', 'x86_64', 'arm64-v8a', 'armeabi-v7a', 'armeabi'
+            include 'x86', 'x86_64', 'arm64-v8a', 'armeabi-v7a'
             universalApk false
         }
     }
@@ -77,8 +82,10 @@ dependencies {
 
     implementation project(':animated-base')
     implementation project(':animated-gif')
+    implementation project(':animated-gif-lite')
     implementation project(':animated-webp')
     implementation project(':static-webp')
+    implementation project(':native-filters')
 
     implementation project(':drawee-backends:drawee-pipeline')
     implementation project(':drawee-span')
@@ -92,7 +99,8 @@ dependencies {
     implementation 'com.caverock:androidsvg:1.2.1'
 
     // Testing-only dependencies
-    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
-    androidTestImplementation 'com.android.support.test:runner:1.0.1'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+    androidTestImplementation 'com.android.support.test:rules:1.0.2'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation "junit:junit:${JUNIT_VERSION}"
 }

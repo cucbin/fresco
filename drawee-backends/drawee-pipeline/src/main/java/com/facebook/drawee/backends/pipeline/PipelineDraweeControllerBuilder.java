@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -28,6 +28,7 @@ import com.facebook.imagepipeline.image.ImageInfo;
 import com.facebook.imagepipeline.listener.RequestListener;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.request.ImageRequestBuilder;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -109,23 +110,32 @@ public class PipelineDraweeControllerBuilder extends AbstractDraweeControllerBui
 
   @Override
   protected PipelineDraweeController obtainController() {
-    DraweeController oldController = getOldController();
-    PipelineDraweeController controller;
-    final String controllerId = generateUniqueControllerId();
-    if (oldController instanceof PipelineDraweeController) {
-      controller = (PipelineDraweeController) oldController;
-    } else {
-      controller = mPipelineDraweeControllerFactory.newController();
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("PipelineDraweeControllerBuilder#obtainController");
     }
-    controller.initialize(
-        obtainDataSourceSupplier(controller, controllerId),
-        controllerId,
-        getCacheKey(),
-        getCallerContext(),
-        mCustomDrawableFactories,
-        mImageOriginListener);
-    controller.initializePerformanceMonitoring(mImagePerfDataListener);
-    return controller;
+    try {
+      DraweeController oldController = getOldController();
+      PipelineDraweeController controller;
+      final String controllerId = generateUniqueControllerId();
+      if (oldController instanceof PipelineDraweeController) {
+        controller = (PipelineDraweeController) oldController;
+      } else {
+        controller = mPipelineDraweeControllerFactory.newController();
+      }
+      controller.initialize(
+          obtainDataSourceSupplier(controller, controllerId),
+          controllerId,
+          getCacheKey(),
+          getCallerContext(),
+          mCustomDrawableFactories,
+          mImageOriginListener);
+      controller.initializePerformanceMonitoring(mImagePerfDataListener);
+      return controller;
+    } finally {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
+    }
   }
 
   private CacheKey getCacheKey() {

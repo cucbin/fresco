@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -40,8 +40,8 @@ public class ImageRequestBuilder {
   private Priority mRequestPriority = Priority.HIGH;
   private @Nullable Postprocessor mPostprocessor = null;
   private boolean mDiskCacheEnabled = true;
+  private boolean mMemoryCacheEnabled = true;
   private @Nullable RequestListener mRequestListener;
-  private @Nullable MediaVariations mMediaVariations = null;
   private @Nullable BytesRange mBytesRange = null;
 
   /**
@@ -86,7 +86,6 @@ public class ImageRequestBuilder {
         .setCacheChoice(imageRequest.getCacheChoice())
         .setLocalThumbnailPreviewsEnabled(imageRequest.getLocalThumbnailPreviewsEnabled())
         .setLowestPermittedRequestLevel(imageRequest.getLowestPermittedRequestLevel())
-        .setMediaVariations(imageRequest.getMediaVariations())
         .setPostprocessor(imageRequest.getPostprocessor())
         .setProgressiveRenderingEnabled(imageRequest.getProgressiveRenderingEnabled())
         .setRequestPriority(imageRequest.getPriority())
@@ -114,39 +113,6 @@ public class ImageRequestBuilder {
   /** Gets the source Uri. */
   public Uri getSourceUri() {
     return mSourceUri;
-  }
-
-  /**
-   * Sets details of variations of the piece of media which might allow the request to be satisfied
-   * (either as a placeholder or ultimate result) by a cached image at another size.
-   *
-   * <p><i>Experimental.</i> This is now functional but the behaviour is still being tested.
-   * @param mediaVariations the variations of image which relate to the same original media
-   * @return the updated builder instance
-   */
-  public ImageRequestBuilder setMediaVariations(MediaVariations mediaVariations) {
-    mMediaVariations = mediaVariations;
-    return this;
-  }
-
-  /**
-   * Sets a media ID for variations of the piece of media which might allow the request to be
-   * satisfied (either as a placeholder or ultimate result) by a cached image at another size.
-   *
-   * <p><i>Experimental.</i> This is now functional but the behaviour is still being tested.
-   * @see #setMediaVariations(MediaVariations)
-   * @param mediaId the unique ID for this piece of media. This must be non-null and unique for
-   *                this piece of media (i.e. another request for the same picture at a different
-   *                size should share the ID but not an unrelated image and not the same media at
-   *                a different orientation).
-   * @return the updated builder instance
-   */
-  public ImageRequestBuilder setMediaVariationsForMediaId(String mediaId) {
-    return setMediaVariations(MediaVariations.forMediaId(mediaId));
-  }
-
-  public @Nullable MediaVariations getMediaVariations() {
-    return mMediaVariations;
   }
 
   /**
@@ -300,6 +266,17 @@ public class ImageRequestBuilder {
   /** Returns whether the use of the disk cache is enabled, which is partly dependent on the URI. */
   public boolean isDiskCacheEnabled() {
     return mDiskCacheEnabled && UriUtil.isNetworkUri(mSourceUri);
+  }
+
+  /** Disables memory cache for this request. */
+  public ImageRequestBuilder disableMemoryCache() {
+    mMemoryCacheEnabled = false;
+    return this;
+  }
+
+  /** Returns whether the use of the memory cache is enabled. */
+  public boolean isMemoryCacheEnabled() {
+    return mMemoryCacheEnabled;
   }
 
   /**
