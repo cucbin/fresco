@@ -14,21 +14,20 @@ package com.facebook.fresco.samples.showcase.drawee;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.widget.GridLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.Switch;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.drawee.backends.pipeline.PipelineDraweeControllerBuilder;
 import com.facebook.drawee.view.SimpleDraweeView;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
 import com.facebook.fresco.samples.showcase.R;
-import com.facebook.fresco.samples.showcase.misc.ImageUriProvider;
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider.ImageSize;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.request.ImageRequest;
@@ -85,9 +84,8 @@ public class DraweeRecyclerViewFragment extends BaseShowcaseFragment {
     recyclerView.setLayoutManager(layoutManager);
     recyclerView.setHasFixedSize(true);
 
-    final ImageUriProvider uriProvider = ImageUriProvider.getInstance(getContext());
-    final List<Uri> smallDummyData = uriProvider.getRandomSampleUris(ImageSize.S, NUM_ENTRIES);
-    final List<Uri> bigDummyData = uriProvider.getRandomSampleUris(ImageSize.M, NUM_ENTRIES);
+    final List<Uri> smallDummyData = sampleUris().getRandomSampleUris(ImageSize.S, NUM_ENTRIES);
+    final List<Uri> bigDummyData = sampleUris().getRandomSampleUris(ImageSize.M, NUM_ENTRIES);
     final SimpleAdapter adapter = new SimpleAdapter(smallDummyData);
     recyclerView.setAdapter(adapter);
 

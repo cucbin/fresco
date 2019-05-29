@@ -14,12 +14,12 @@ package com.facebook.fresco.samples.showcase.drawee;
 import android.graphics.PointF;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.Spinner;
+import androidx.annotation.Nullable;
 import com.facebook.drawee.drawable.ScalingUtils.ScaleType;
 import com.facebook.drawee.generic.GenericDraweeHierarchy;
 import com.facebook.drawee.view.SimpleDraweeView;
@@ -46,7 +46,7 @@ public class DraweeScaleTypeFragment extends BaseShowcaseFragment {
       @Nullable Bundle savedInstanceState) {
     final View view = inflater.inflate(R.layout.fragment_drawee_scale_type, container, false);
 
-    final ImageUriProvider imageUriProvider = ImageUriProvider.getInstance(getContext());
+    final ImageUriProvider imageUriProvider = sampleUris();
     final Uri uri1 = imageUriProvider.createSampleUri(
         ImageUriProvider.ImageSize.M,
         ImageUriProvider.Orientation.LANDSCAPE);

@@ -27,6 +27,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * BufferedDiskCache provides get and put operations to take care of scheduling disk-cache
@@ -173,7 +174,7 @@ public class BufferedDiskCache {
       return Task.call(
           new Callable<EncodedImage>() {
             @Override
-            public EncodedImage call() throws Exception {
+            public @Nullable EncodedImage call() throws Exception {
               try {
                 if (FrescoSystrace.isTracing()) {
                   FrescoSystrace.beginSection("BufferedDiskCache#getAsync");
@@ -191,6 +192,9 @@ public class BufferedDiskCache {
 
                   try {
                     final PooledByteBuffer buffer = readFromDiskCache(key);
+                    if (buffer == null) {
+                      return null;
+                    }
                     CloseableReference<PooledByteBuffer> ref = CloseableReference.of(buffer);
                     try {
                       result = new EncodedImage(ref);
@@ -344,16 +348,18 @@ public class BufferedDiskCache {
     }
   }
 
+  public long getSize() {
+    return mFileCache.getSize();
+  }
+
   private Task<EncodedImage> foundPinnedImage(CacheKey key, EncodedImage pinnedImage) {
     FLog.v(TAG, "Found image for %s in staging area", key.getUriString());
     mImageCacheStatsTracker.onStagingAreaHit(key);
     return Task.forResult(pinnedImage);
   }
 
-  /**
-   * Performs disk cache read. In case of any exception null is returned.
-   */
-  private PooledByteBuffer readFromDiskCache(final CacheKey key) throws IOException {
+  /** Performs disk cache read. In case of any exception null is returned. */
+  private @Nullable PooledByteBuffer readFromDiskCache(final CacheKey key) throws IOException {
     try {
       FLog.v(TAG, "Disk cache read for %s", key.getUriString());
 

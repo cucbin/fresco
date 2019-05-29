@@ -11,6 +11,7 @@ import android.net.Uri;
 import bolts.Continuation;
 import bolts.Task;
 import com.facebook.cache.common.CacheKey;
+import com.facebook.callercontext.CallerContextVerifier;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Predicate;
@@ -63,6 +64,7 @@ public class ImagePipeline {
   private final Supplier<Boolean> mSuppressBitmapPrefetchingSupplier;
   private AtomicLong mIdCounter;
   private final Supplier<Boolean> mLazyDataSource;
+  private final @Nullable CallerContextVerifier mCallerContextVerifier;
 
   public ImagePipeline(
       ProducerSequenceFactory producerSequenceFactory,
@@ -75,7 +77,8 @@ public class ImagePipeline {
       CacheKeyFactory cacheKeyFactory,
       ThreadHandoffProducerQueue threadHandoffProducerQueue,
       Supplier<Boolean> suppressBitmapPrefetchingSupplier,
-      Supplier<Boolean> lazyDataSource) {
+      Supplier<Boolean> lazyDataSource,
+      @Nullable CallerContextVerifier callerContextVerifier) {
     mIdCounter = new AtomicLong();
     mProducerSequenceFactory = producerSequenceFactory;
     mRequestListener = new ForwardingRequestListener(requestListeners);
@@ -88,6 +91,7 @@ public class ImagePipeline {
     mThreadHandoffProducerQueue = threadHandoffProducerQueue;
     mSuppressBitmapPrefetchingSupplier = suppressBitmapPrefetchingSupplier;
     mLazyDataSource = lazyDataSource;
+    mCallerContextVerifier = callerContextVerifier;
   }
 
   /**
@@ -350,9 +354,16 @@ public class ImagePipeline {
       return DataSources.immediateFailedDataSource(PREFETCH_EXCEPTION);
     }
     try {
-      Producer<Void> producerSequence = mSuppressBitmapPrefetchingSupplier.get()
-          ? mProducerSequenceFactory.getEncodedImagePrefetchProducerSequence(imageRequest)
-          : mProducerSequenceFactory.getDecodedImagePrefetchProducerSequence(imageRequest);
+      final Boolean shouldDecodePrefetches = imageRequest.shouldDecodePrefetches();
+      final boolean skipBitmapCache =
+          shouldDecodePrefetches != null
+              ? !shouldDecodePrefetches // use imagerequest param if specified
+              : mSuppressBitmapPrefetchingSupplier
+                  .get(); // otherwise fall back to pipeline's default
+      Producer<Void> producerSequence =
+          skipBitmapCache
+              ? mProducerSequenceFactory.getEncodedImagePrefetchProducerSequence(imageRequest)
+              : mProducerSequenceFactory.getDecodedImagePrefetchProducerSequence(imageRequest);
       return submitPrefetchRequest(
           producerSequence,
           imageRequest,
@@ -477,6 +488,15 @@ public class ImagePipeline {
   public void clearDiskCaches() {
     mMainBufferedDiskCache.clearAll();
     mSmallImageBufferedDiskCache.clearAll();
+  }
+
+  /**
+   * Current disk caches size
+   *
+   * @return size in Bytes
+   */
+  public long getUsedDiskCacheSize() {
+    return mMainBufferedDiskCache.getSize() + mSmallImageBufferedDiskCache.getSize();
   }
 
   /**
@@ -625,11 +645,12 @@ public class ImagePipeline {
             });
     return dataSource;
   }
-/**
- * @return {@link CacheKey} for doing bitmap cache lookups in the pipeline.
- */
+  /** @return {@link CacheKey} for doing bitmap cache lookups in the pipeline. */
   @Nullable
-  public CacheKey getCacheKey(ImageRequest imageRequest, Object callerContext) {
+  public CacheKey getCacheKey(@Nullable ImageRequest imageRequest, Object callerContext) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("ImagePipeline#getCacheKey");
+    }
     final CacheKeyFactory cacheKeyFactory = mCacheKeyFactory;
     CacheKey cacheKey = null;
     if (cacheKeyFactory != null && imageRequest != null) {
@@ -638,6 +659,9 @@ public class ImagePipeline {
       } else {
         cacheKey = cacheKeyFactory.getBitmapCacheKey(imageRequest, callerContext);
       }
+    }
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
     }
     return cacheKey;
   }
@@ -662,6 +686,14 @@ public class ImagePipeline {
     return closeableImage;
   }
 
+  public boolean hasCachedImage(@Nullable CacheKey cacheKey) {
+    MemoryCache<CacheKey, CloseableImage> memoryCache = mBitmapMemoryCache;
+    if (memoryCache == null || cacheKey == null) {
+      return false;
+    }
+    return memoryCache.contains(cacheKey);
+  }
+
   private <T> DataSource<CloseableReference<T>> submitFetchRequest(
       Producer<CloseableReference<T>> producerSequence,
       ImageRequest imageRequest,
@@ -673,6 +705,10 @@ public class ImagePipeline {
     }
     final RequestListener finalRequestListener =
         getRequestListenerForRequest(imageRequest, requestListener);
+
+    if (mCallerContextVerifier != null) {
+      mCallerContextVerifier.verifyCallerContext(callerContext);
+    }
 
     try {
       ImageRequest.RequestLevel lowestPermittedRequestLevel =
@@ -731,6 +767,9 @@ public class ImagePipeline {
       Priority priority) {
     final RequestListener requestListener = getRequestListenerForRequest(imageRequest, null);
 
+    if (mCallerContextVerifier != null) {
+      mCallerContextVerifier.verifyCallerContext(callerContext);
+    }
     try {
       ImageRequest.RequestLevel lowestPermittedRequestLevel =
           ImageRequest.RequestLevel.getMax(

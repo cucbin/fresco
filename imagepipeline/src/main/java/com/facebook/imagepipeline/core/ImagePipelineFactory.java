@@ -9,8 +9,6 @@ package com.facebook.imagepipeline.core;
 
 import android.content.Context;
 import android.os.Build;
-import android.support.annotation.Nullable;
-import android.support.v4.util.Pools;
 import com.facebook.cache.common.CacheKey;
 import com.facebook.cache.disk.DiskCacheConfig;
 import com.facebook.cache.disk.FileCache;
@@ -22,11 +20,8 @@ import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.imageformat.ImageFormatChecker;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactory;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactoryProvider;
-import com.facebook.imagepipeline.bitmaps.ArtBitmapFactory;
-import com.facebook.imagepipeline.bitmaps.EmptyJpegGenerator;
-import com.facebook.imagepipeline.bitmaps.GingerbreadBitmapFactory;
-import com.facebook.imagepipeline.bitmaps.HoneycombBitmapFactory;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
+import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactoryProvider;
 import com.facebook.imagepipeline.cache.BitmapCountingMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.BitmapMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.BufferedDiskCache;
@@ -38,18 +33,15 @@ import com.facebook.imagepipeline.decoder.DefaultImageDecoder;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.imagepipeline.image.CloseableImage;
-import com.facebook.imagepipeline.memory.PoolFactory;
-import com.facebook.imagepipeline.platform.ArtDecoder;
-import com.facebook.imagepipeline.platform.GingerbreadPurgeableDecoder;
-import com.facebook.imagepipeline.platform.KitKatPurgeableDecoder;
-import com.facebook.imagepipeline.platform.OreoDecoder;
 import com.facebook.imagepipeline.platform.PlatformDecoder;
+import com.facebook.imagepipeline.platform.PlatformDecoderFactory;
 import com.facebook.imagepipeline.producers.ThreadHandoffProducerQueue;
 import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import com.facebook.imagepipeline.transcoder.ImageTranscoder;
 import com.facebook.imagepipeline.transcoder.ImageTranscoderFactory;
 import com.facebook.imagepipeline.transcoder.MultiImageTranscoderFactory;
 import com.facebook.imagepipeline.transcoder.SimpleImageTranscoderFactory;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -159,10 +151,12 @@ public class ImagePipelineFactory {
   @Nullable
   private AnimatedFactory getAnimatedFactory() {
     if (mAnimatedFactory == null) {
-      mAnimatedFactory = AnimatedFactoryProvider.getAnimatedFactory(
-          getPlatformBitmapFactory(),
-          mConfig.getExecutorSupplier(),
-          getBitmapCountingMemoryCache());
+      mAnimatedFactory =
+          AnimatedFactoryProvider.getAnimatedFactory(
+              getPlatformBitmapFactory(),
+              mConfig.getExecutorSupplier(),
+              getBitmapCountingMemoryCache(),
+              mConfig.getExperiments().shouldDownscaleFrameToDrawableDimensions());
     }
     return mAnimatedFactory;
   }
@@ -286,73 +280,25 @@ public class ImagePipelineFactory {
               mConfig.getCacheKeyFactory(),
               mThreadHandoffProducerQueue,
               Suppliers.of(false),
-              mConfig.getExperiments().isLazyDataSource());
+              mConfig.getExperiments().isLazyDataSource(),
+              mConfig.getCallerContextVerifier());
     }
     return mImagePipeline;
   }
 
-  /**
-   * Provide the implementation of the PlatformBitmapFactory for the current platform
-   * using the provided PoolFactory
-   *
-   * @param poolFactory The PoolFactory
-   * @param platformDecoder The PlatformDecoder
-   * @return The PlatformBitmapFactory implementation
-   */
-  public static PlatformBitmapFactory buildPlatformBitmapFactory(
-      PoolFactory poolFactory,
-      PlatformDecoder platformDecoder) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      return new ArtBitmapFactory(poolFactory.getBitmapPool());
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-      return new HoneycombBitmapFactory(
-          new EmptyJpegGenerator(poolFactory.getPooledByteBufferFactory()), platformDecoder);
-    } else {
-      return new GingerbreadBitmapFactory();
-    }
-  }
-
   public PlatformBitmapFactory getPlatformBitmapFactory() {
     if (mPlatformBitmapFactory == null) {
-      mPlatformBitmapFactory = buildPlatformBitmapFactory(
-          mConfig.getPoolFactory(),
-          getPlatformDecoder());
+      mPlatformBitmapFactory =
+          PlatformBitmapFactoryProvider.buildPlatformBitmapFactory(
+              mConfig.getPoolFactory(), getPlatformDecoder());
     }
     return mPlatformBitmapFactory;
-  }
-
-  /**
-   * Provide the implementation of the PlatformDecoder for the current platform using the provided
-   * PoolFactory
-   *
-   * @param poolFactory The PoolFactory
-   * @return The PlatformDecoder implementation
-   */
-  public static PlatformDecoder buildPlatformDecoder(
-      PoolFactory poolFactory, boolean gingerbreadDecoderEnabled) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      int maxNumThreads = poolFactory.getFlexByteArrayPoolMaxNumThreads();
-      return new OreoDecoder(
-          poolFactory.getBitmapPool(), maxNumThreads, new Pools.SynchronizedPool<>(maxNumThreads));
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      int maxNumThreads = poolFactory.getFlexByteArrayPoolMaxNumThreads();
-      return new ArtDecoder(
-          poolFactory.getBitmapPool(),
-          maxNumThreads,
-          new Pools.SynchronizedPool<>(maxNumThreads));
-    } else {
-      if (gingerbreadDecoderEnabled && Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-        return new GingerbreadPurgeableDecoder();
-      } else {
-        return new KitKatPurgeableDecoder(poolFactory.getFlexByteArrayPool());
-      }
-    }
   }
 
   public PlatformDecoder getPlatformDecoder() {
     if (mPlatformDecoder == null) {
       mPlatformDecoder =
-          buildPlatformDecoder(
+          PlatformDecoderFactory.buildPlatformDecoder(
               mConfig.getPoolFactory(), mConfig.getExperiments().isGingerbreadDecoderEnabled());
     }
     return mPlatformDecoder;

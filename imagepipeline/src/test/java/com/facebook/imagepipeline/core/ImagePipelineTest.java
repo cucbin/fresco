@@ -89,23 +89,27 @@ public class ImagePipelineTest {
     mMainDiskStorageCache = mock(BufferedDiskCache.class);
     mSmallImageDiskStorageCache = mock(BufferedDiskCache.class);
     mThreadHandoffProducerQueue= mock(ThreadHandoffProducerQueue.class);
-    mImagePipeline = new ImagePipeline(
-        mProducerSequenceFactory,
-        Sets.newHashSet(mRequestListener1, mRequestListener2),
-        mPrefetchEnabledSupplier,
-        mBitmapMemoryCache,
-        mEncodedMemoryCache,
-        mMainDiskStorageCache,
-        mSmallImageDiskStorageCache,
-        mCacheKeyFactory,
-        mThreadHandoffProducerQueue,
-        mSuppressBitmapPrefetchingSupplier,
-        mLazyDataSourceSupplier);
+    mImagePipeline =
+        new ImagePipeline(
+            mProducerSequenceFactory,
+            Sets.newHashSet(mRequestListener1, mRequestListener2),
+            mPrefetchEnabledSupplier,
+            mBitmapMemoryCache,
+            mEncodedMemoryCache,
+            mMainDiskStorageCache,
+            mSmallImageDiskStorageCache,
+            mCacheKeyFactory,
+            mThreadHandoffProducerQueue,
+            mSuppressBitmapPrefetchingSupplier,
+            mLazyDataSourceSupplier,
+            null);
 
     when(mImageRequest.getProgressiveRenderingEnabled()).thenReturn(true);
     when(mImageRequest.getPriority()).thenReturn(Priority.HIGH);
     when(mImageRequest.getLowestPermittedRequestLevel())
         .thenReturn(ImageRequest.RequestLevel.FULL_FETCH);
+    when(mImageRequest.shouldDecodePrefetches())
+            .thenReturn(null);
   }
 
   @Test
@@ -488,6 +492,13 @@ public class ImagePipelineTest {
     mImagePipeline.clearDiskCaches();
     verify(mMainDiskStorageCache).clearAll();
     verify(mSmallImageDiskStorageCache).clearAll();
+  }
+
+  @Test
+  public void testDiskCachesSize() {
+    mImagePipeline.getUsedDiskCacheSize();
+    verify(mMainDiskStorageCache).getSize();
+    verify(mSmallImageDiskStorageCache).getSize();
   }
 
   @Test

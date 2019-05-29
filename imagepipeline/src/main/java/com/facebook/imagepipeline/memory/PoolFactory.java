@@ -45,12 +45,18 @@ public class PoolFactory {
         case BitmapPoolType.DUMMY:
           mBitmapPool = new DummyBitmapPool();
           break;
+        case BitmapPoolType.DUMMY_WITH_TRACKING:
+          mBitmapPool = new DummyTrackingInUseBitmapPool();
+          break;
         case BitmapPoolType.EXPERIMENTAL:
           mBitmapPool =
               new LruBitmapPool(
                   mConfig.getBitmapPoolMaxPoolSize(),
                   mConfig.getBitmapPoolMaxBitmapSize(),
-                  NoOpPoolStatsTracker.getInstance());
+                  NoOpPoolStatsTracker.getInstance(),
+                  mConfig.isRegisterLruBitmapPoolAsMemoryTrimmable()
+                      ? mConfig.getMemoryTrimmableRegistry()
+                      : null);
           break;
         case BitmapPoolType.LEGACY_DEFAULT_PARAMS:
           mBitmapPool =

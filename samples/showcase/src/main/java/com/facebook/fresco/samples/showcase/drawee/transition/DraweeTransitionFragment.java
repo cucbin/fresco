@@ -16,10 +16,10 @@ import android.content.Intent;
 import android.graphics.PointF;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import androidx.annotation.Nullable;
 import com.facebook.drawee.drawable.ScalingUtils;
 import com.facebook.drawee.view.SimpleDraweeView;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
@@ -42,8 +42,7 @@ public class DraweeTransitionFragment extends BaseShowcaseFragment {
 
   @Override
   public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-    final ImageUriProvider imageUriProvider = ImageUriProvider.getInstance(getContext());
-    final Uri imageUri = imageUriProvider.createSampleUri(ImageUriProvider.ImageSize.M);
+    final Uri imageUri = sampleUris().createSampleUri(ImageUriProvider.ImageSize.M);
 
     final SimpleDraweeView simpleDraweeView =
         (SimpleDraweeView) view.findViewById(R.id.drawee_view);

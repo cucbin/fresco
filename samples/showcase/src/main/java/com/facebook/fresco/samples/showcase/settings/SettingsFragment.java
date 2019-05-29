@@ -16,19 +16,20 @@ import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.preference.Preference;
-import android.support.v7.preference.PreferenceFragmentCompat;
-import android.support.v7.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.DialogFragment;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceManager;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.fresco.samples.showcase.R;
+import com.facebook.fresco.samples.showcase.ShowcaseApplication;
 import com.facebook.fresco.samples.showcase.ShowcaseFragment;
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider;
 import java.util.Arrays;
@@ -82,7 +83,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
 
   @Override
   public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-    mImageUriProvider = ImageUriProvider.getInstance(getContext());
+    mImageUriProvider = ShowcaseApplication.Companion.getImageUriProvider();
     addPreferencesFromResource(R.xml.preferences);
     getPreferenceManager().getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
     populateUriOverride();
@@ -175,7 +176,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
 
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
-      mImageUriProvider = ImageUriProvider.getInstance(getContext());
+      mImageUriProvider = ShowcaseApplication.Companion.getImageUriProvider();
       mSharedPreferences  = PreferenceManager.getDefaultSharedPreferences(getContext());
 
       final View view = getActivity().getLayoutInflater().inflate(

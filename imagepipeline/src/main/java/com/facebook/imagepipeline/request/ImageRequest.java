@@ -80,21 +80,37 @@ public class ImageRequest {
   /** Whether the memory cache should be used for this request */
   private final boolean mIsMemoryCacheEnabled;
 
+  /**
+   * Whether to decode prefetched images.
+   * true -> Cache both encoded image and bitmap.
+   * false -> Cache only encoded image and do not decode until image is needed to be shown.
+   * null -> Use pipeline's default
+   */
+  private final @Nullable Boolean mDecodePrefetches;
+
   /** Postprocessor to run on the output bitmap. */
   private final @Nullable Postprocessor mPostprocessor;
 
   /** Request listener to use for this image request */
   private final @Nullable RequestListener mRequestListener;
 
-  public static ImageRequest fromFile(@Nullable File file) {
+  /**
+   * Controls whether resizing is allowed for this request.
+   * true  -> allow for this request.
+   * false -> disallow for this request.
+   * null  -> use default pipeline's setting.
+   */
+  private final @Nullable Boolean mResizingAllowedOverride;
+
+  public static @Nullable ImageRequest fromFile(@Nullable File file) {
     return (file == null) ? null : ImageRequest.fromUri(UriUtil.getUriForFile(file));
   }
 
-  public static ImageRequest fromUri(@Nullable Uri uri) {
+  public static @Nullable ImageRequest fromUri(@Nullable Uri uri) {
     return (uri == null) ? null : ImageRequestBuilder.newBuilderWithSource(uri).build();
   }
 
-  public static ImageRequest fromUri(@Nullable String uriString) {
+  public static @Nullable ImageRequest fromUri(@Nullable String uriString) {
     return (uriString == null || uriString.length() == 0) ? null : fromUri(Uri.parse(uriString));
   }
 
@@ -117,10 +133,13 @@ public class ImageRequest {
     mLowestPermittedRequestLevel = builder.getLowestPermittedRequestLevel();
     mIsDiskCacheEnabled = builder.isDiskCacheEnabled();
     mIsMemoryCacheEnabled = builder.isMemoryCacheEnabled();
+    mDecodePrefetches = builder.shouldDecodePrefetches();
 
     mPostprocessor = builder.getPostprocessor();
 
     mRequestListener = builder.getRequestListener();
+
+    mResizingAllowedOverride = builder.getResizingAllowedOverride();
   }
 
   public CacheChoice getCacheChoice() {
@@ -192,6 +211,14 @@ public class ImageRequest {
     return mIsMemoryCacheEnabled;
   }
 
+  public @Nullable Boolean shouldDecodePrefetches() {
+    return mDecodePrefetches;
+  }
+
+  public @Nullable Boolean getResizingAllowedOverride() {
+    return mResizingAllowedOverride;
+  }
+
   public synchronized File getSourceFile() {
     if (mSourceFile == null) {
       mSourceFile = new File(mSourceUri.getPath());
@@ -241,7 +268,8 @@ public class ImageRequest {
         mImageDecodeOptions,
         mResizeOptions,
         mRotationOptions,
-        postprocessorCacheKey);
+        postprocessorCacheKey,
+        mResizingAllowedOverride);
   }
 
   @Override
@@ -255,6 +283,7 @@ public class ImageRequest {
         .add("resizeOptions", mResizeOptions)
         .add("rotationOptions", mRotationOptions)
         .add("bytesRange", mBytesRange)
+        .add("resizingAllowedOverride", mResizingAllowedOverride)
         .toString();
   }
 

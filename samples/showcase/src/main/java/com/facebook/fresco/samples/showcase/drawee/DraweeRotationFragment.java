@@ -13,7 +13,6 @@ package com.facebook.fresco.samples.showcase.drawee;
 
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +20,7 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
+import androidx.annotation.Nullable;
 import com.facebook.drawee.view.SimpleDraweeView;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
 import com.facebook.fresco.samples.showcase.R;
@@ -47,8 +47,7 @@ public class DraweeRotationFragment extends BaseShowcaseFragment {
 
   @Override
   public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-    final ImageUriProvider imageUriProvider = ImageUriProvider.getInstance(getContext());
-    mUri = imageUriProvider.createSampleUri(ImageUriProvider.ImageSize.M);
+    mUri = sampleUris().createSampleUri(ImageUriProvider.ImageSize.M);
 
     mSimpleDraweeView = (SimpleDraweeView) view.findViewById(R.id.drawee_view);
     final Spinner spinner = (Spinner) view.findViewById(R.id.spinner);
@@ -80,7 +79,7 @@ public class DraweeRotationFragment extends BaseShowcaseFragment {
     ImageRequest imageRequest =
         ImageRequestBuilder.newBuilderWithSource(mUri)
             .setRotationOptions(rotationOptions)
-            .setImageDecodeOptions(new ImageDecodeOptionsBuilder().setTransformToSRGB(true).build())
+            .setImageDecodeOptions(new ImageDecodeOptionsBuilder().build())
             .build();
     mSimpleDraweeView.setImageRequest(imageRequest);
   }

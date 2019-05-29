@@ -14,7 +14,7 @@ import android.graphics.BitmapRegionDecoder;
 import android.graphics.ColorSpace;
 import android.graphics.Rect;
 import android.os.Build;
-import android.support.v4.util.Pools.SynchronizedPool;
+import androidx.core.util.Pools.SynchronizedPool;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.logging.FLog;
@@ -43,6 +43,13 @@ public abstract class DefaultDecoder implements PlatformDecoder {
 
   private final BitmapPool mBitmapPool;
 
+  private final @Nullable PreverificationHelper mPreverificationHelper;
+
+  {
+    mPreverificationHelper =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new PreverificationHelper() : null;
+  }
+
   /**
    * ArtPlatformImageDecoder decodes images from InputStream - to do so we need to provide temporary
    * buffer, otherwise framework will allocate one for us for each decode request
@@ -64,7 +71,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
   @Override
   public CloseableReference<Bitmap> decodeFromEncodedImage(
       EncodedImage encodedImage, Bitmap.Config bitmapConfig, @Nullable Rect regionToDecode) {
-    return decodeFromEncodedImageWithColorSpace(encodedImage, bitmapConfig, regionToDecode, false);
+    return decodeFromEncodedImageWithColorSpace(encodedImage, bitmapConfig, regionToDecode, null);
   }
 
   @Override
@@ -74,7 +81,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
       @Nullable Rect regionToDecode,
       int length) {
     return decodeJPEGFromEncodedImageWithColorSpace(
-        encodedImage, bitmapConfig, regionToDecode, length, false);
+        encodedImage, bitmapConfig, regionToDecode, length, null);
   }
 
   /**
@@ -84,7 +91,9 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    * @param bitmapConfig the {@link android.graphics.Bitmap.Config} used to create the decoded
    *     Bitmap
    * @param regionToDecode optional image region to decode or null to decode the whole image
-   * @param transformToSRGB whether to allow color space transformation to sRGB at load time
+   * @param colorSpace the target color space of the decoded bitmap, must be one of the named color
+   *     space in {@link android.graphics.ColorSpace.Named}. If null, then SRGB color space is
+   *     assumed if the SDK version >= 26.
    * @return the bitmap
    * @exception java.lang.OutOfMemoryError if the Bitmap cannot be allocated
    */
@@ -93,16 +102,15 @@ public abstract class DefaultDecoder implements PlatformDecoder {
       EncodedImage encodedImage,
       Bitmap.Config bitmapConfig,
       @Nullable Rect regionToDecode,
-      final boolean transformToSRGB) {
+      @Nullable final ColorSpace colorSpace) {
     final BitmapFactory.Options options = getDecodeOptionsForStream(encodedImage, bitmapConfig);
     boolean retryOnFail = options.inPreferredConfig != Bitmap.Config.ARGB_8888;
     try {
-      return decodeFromStream(
-          encodedImage.getInputStream(), options, regionToDecode, transformToSRGB);
+      return decodeFromStream(encodedImage.getInputStream(), options, regionToDecode, colorSpace);
     } catch (RuntimeException re) {
       if (retryOnFail) {
         return decodeFromEncodedImageWithColorSpace(
-            encodedImage, Bitmap.Config.ARGB_8888, regionToDecode, transformToSRGB);
+            encodedImage, Bitmap.Config.ARGB_8888, regionToDecode, colorSpace);
       }
       throw re;
     }
@@ -116,7 +124,9 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    *     Bitmap
    * @param regionToDecode optional image region to decode or null to decode the whole image
    * @param length the number of encoded bytes in the buffer
-   * @param transformToSRGB whether to allow color space transformation to sRGB at load time
+   * @param colorSpace the target color space of the decoded bitmap, must be one of the named color
+   *     space in {@link android.graphics.ColorSpace.Named}. If null, then SRGB color space is
+   *     assumed if the SDK version >= 26.
    * @return the bitmap
    * @exception java.lang.OutOfMemoryError if the Bitmap cannot be allocated
    */
@@ -126,7 +136,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
       Bitmap.Config bitmapConfig,
       @Nullable Rect regionToDecode,
       int length,
-      final boolean transformToSRGB) {
+      @Nullable final ColorSpace colorSpace) {
     boolean isJpegComplete = encodedImage.isCompleteAt(length);
     final BitmapFactory.Options options = getDecodeOptionsForStream(encodedImage, bitmapConfig);
     InputStream jpegDataStream = encodedImage.getInputStream();
@@ -142,11 +152,11 @@ public abstract class DefaultDecoder implements PlatformDecoder {
     }
     boolean retryOnFail = options.inPreferredConfig != Bitmap.Config.ARGB_8888;
     try {
-      return decodeFromStream(jpegDataStream, options, regionToDecode, transformToSRGB);
+      return decodeFromStream(jpegDataStream, options, regionToDecode, colorSpace);
     } catch (RuntimeException re) {
       if (retryOnFail) {
         return decodeJPEGFromEncodedImageWithColorSpace(
-            encodedImage, Bitmap.Config.ARGB_8888, regionToDecode, length, transformToSRGB);
+            encodedImage, Bitmap.Config.ARGB_8888, regionToDecode, length, colorSpace);
       }
       throw re;
     }
@@ -162,7 +172,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    */
   protected CloseableReference<Bitmap> decodeStaticImageFromStream(
       InputStream inputStream, BitmapFactory.Options options, @Nullable Rect regionToDecode) {
-    return decodeFromStream(inputStream, options, regionToDecode, false);
+    return decodeFromStream(inputStream, options, regionToDecode, null);
   }
 
   /**
@@ -171,14 +181,16 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    * @param inputStream the InputStream
    * @param options the {@link android.graphics.BitmapFactory.Options} used to decode the stream
    * @param regionToDecode optional image region to decode or null to decode the whole image
-   * @param transformToSRGB whether to allow color space transformation to sRGB at load time
+   * @param colorSpace the target color space of the decoded bitmap, must be one of the named color
+   *     space in {@link android.graphics.ColorSpace.Named}. If null, then SRGB color space is
+   *     assumed if the SDK version >= 26.
    * @return the bitmap
    */
   private CloseableReference<Bitmap> decodeFromStream(
       InputStream inputStream,
       BitmapFactory.Options options,
       @Nullable Rect regionToDecode,
-      final boolean transformToSRGB) {
+      @Nullable final ColorSpace colorSpace) {
     Preconditions.checkNotNull(inputStream);
     int targetWidth = options.outWidth;
     int targetHeight = options.outHeight;
@@ -186,16 +198,35 @@ public abstract class DefaultDecoder implements PlatformDecoder {
       targetWidth = regionToDecode.width() / options.inSampleSize;
       targetHeight = regionToDecode.height() / options.inSampleSize;
     }
-    int sizeInBytes = getBitmapSize(targetWidth, targetHeight, options);
-    final Bitmap bitmapToReuse = mBitmapPool.get(sizeInBytes);
-    if (bitmapToReuse == null) {
-      throw new NullPointerException("BitmapPool.get returned null");
+    @Nullable Bitmap bitmapToReuse = null;
+    boolean shouldUseHardwareBitmapConfig = false;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      shouldUseHardwareBitmapConfig =
+          mPreverificationHelper != null
+              && mPreverificationHelper.shouldUseHardwareBitmapConfig(options.inPreferredConfig);
     }
+    if (regionToDecode == null && shouldUseHardwareBitmapConfig) {
+      // Cannot reuse bitmaps with Bitmap.Config.HARDWARE
+      options.inMutable = false;
+    } else {
+      if (regionToDecode != null && shouldUseHardwareBitmapConfig) {
+        // If region decoding was requested we need to fallback to default config
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+      }
+      final int sizeInBytes = getBitmapSize(targetWidth, targetHeight, options);
+      bitmapToReuse = mBitmapPool.get(sizeInBytes);
+      if (bitmapToReuse == null) {
+        throw new NullPointerException("BitmapPool.get returned null");
+      }
+    }
+    // inBitmap can be nullable
+    //noinspection ConstantConditions
     options.inBitmap = bitmapToReuse;
 
-    // Performs transformation at load time to sRGB.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && transformToSRGB) {
-      options.inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+    // Performs transformation at load time to target color space.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      options.inPreferredColorSpace =
+          colorSpace == null ? ColorSpace.get(ColorSpace.Named.SRGB) : colorSpace;
     }
 
     Bitmap decodedBitmap = null;
@@ -205,7 +236,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
     }
     try {
       options.inTempStorage = byteBuffer.array();
-      if (regionToDecode != null) {
+      if (regionToDecode != null && bitmapToReuse != null) {
         BitmapRegionDecoder bitmapRegionDecoder = null;
         try {
           bitmapToReuse.reconfigure(targetWidth, targetHeight, options.inPreferredConfig);
@@ -223,7 +254,9 @@ public abstract class DefaultDecoder implements PlatformDecoder {
         decodedBitmap = BitmapFactory.decodeStream(inputStream, null, options);
       }
     } catch (IllegalArgumentException e) {
-      mBitmapPool.release(bitmapToReuse);
+      if (bitmapToReuse != null) {
+        mBitmapPool.release(bitmapToReuse);
+      }
       // This is thrown if the Bitmap options are invalid, so let's just try to decode the bitmap
       // as-is, which might be inefficient - but it works.
       try {
@@ -241,13 +274,17 @@ public abstract class DefaultDecoder implements PlatformDecoder {
         throw e;
       }
     } catch (RuntimeException re) {
-      mBitmapPool.release(bitmapToReuse);
+      if (bitmapToReuse != null) {
+        mBitmapPool.release(bitmapToReuse);
+      }
       throw re;
     } finally {
       mDecodeBuffers.release(byteBuffer);
     }
 
-    if (bitmapToReuse != decodedBitmap) {
+    // If bitmap with Bitmap.Config.HARDWARE was used, `bitmapToReuse` will be null and it's
+    // expected
+    if (bitmapToReuse != null && bitmapToReuse != decodedBitmap) {
       mBitmapPool.release(bitmapToReuse);
       decodedBitmap.recycle();
       throw new IllegalStateException();

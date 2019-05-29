@@ -12,8 +12,8 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.net.Uri;
 import android.os.Build;
-import android.support.annotation.DrawableRes;
 import android.util.AttributeSet;
+import androidx.annotation.DrawableRes;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.util.UriUtil;
@@ -81,9 +81,6 @@ public class SimpleDraweeView extends GenericDraweeView {
         FrescoSystrace.beginSection("SimpleDraweeView#init");
       }
       if (isInEditMode()) {
-        // Disable roundingParams due to a bug in Android Studio
-        // https://issuetracker.google.com/issues/113560562
-        getHierarchy().setRoundingParams(null);
         getTopLevelDrawable().setVisible(true, false);
         getTopLevelDrawable().invalidateSelf();
       } else {

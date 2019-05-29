@@ -20,7 +20,6 @@ import com.facebook.common.references.ResourceReleaser;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -93,10 +92,6 @@ public class CountingMemoryCache<K, V> implements MemoryCache<K, V>, MemoryTrimm
     }
   }
 
-  // How often the cache checks for a new cache configuration.
-  @VisibleForTesting
-  static final long PARAMS_INTERCHECK_INTERVAL_MS = TimeUnit.MINUTES.toMillis(5);
-
   // Contains the items that are not being used by any client and are hence viable for eviction.
   @GuardedBy("this")
   @VisibleForTesting
@@ -160,15 +155,13 @@ public class CountingMemoryCache<K, V> implements MemoryCache<K, V>, MemoryTrimm
   /**
    * Caches the given key-value pair.
    *
-   * <p> Important: the client should use the returned reference instead of the original one.
-   * It is the caller's responsibility to close the returned reference once not needed anymore.
+   * <p>Important: the client should use the returned reference instead of the original one. It is
+   * the caller's responsibility to close the returned reference once not needed anymore.
    *
    * @return the new reference to be used, null if the value cannot be cached
    */
-  public CloseableReference<V> cache(
-      final K key,
-      final CloseableReference<V> valueRef,
-      final EntryStateObserver<K> observer) {
+  public @Nullable CloseableReference<V> cache(
+      final K key, final CloseableReference<V> valueRef, final EntryStateObserver<K> observer) {
     Preconditions.checkNotNull(key);
     Preconditions.checkNotNull(valueRef);
 
@@ -349,6 +342,7 @@ public class CountingMemoryCache<K, V> implements MemoryCache<K, V>, MemoryTrimm
    * @param key returns true if an item with the given key matches
    * @return true is any items matches from the cache
    */
+  @Override
   public synchronized boolean contains(K key) {
     return mCachedEntries.contains(key);
   }
@@ -374,7 +368,8 @@ public class CountingMemoryCache<K, V> implements MemoryCache<K, V>, MemoryTrimm
    * Updates the cache params (constraints) if enough time has passed since the last update.
    */
   private synchronized void maybeUpdateCacheParams() {
-    if (mLastCacheParamsCheck + PARAMS_INTERCHECK_INTERVAL_MS > SystemClock.uptimeMillis()) {
+    if (mLastCacheParamsCheck + mMemoryCacheParams.paramsCheckIntervalMs
+        > SystemClock.uptimeMillis()) {
       return;
     }
     mLastCacheParamsCheck = SystemClock.uptimeMillis();
