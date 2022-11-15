@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,7 +7,7 @@
 
 package com.facebook.imagepipeline.producers;
 
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.any;
 
@@ -34,16 +34,14 @@ import org.robolectric.*;
 import org.robolectric.annotation.*;
 
 /**
- * Checks basic properties of bitmap memory cache producer operation, that is:
- *   - it delegates to the {@link MemoryCache#get(Object)}
- *   - if {@link MemoryCache#get(Object)} is unsuccessful, then it passes the
- *   request to the next producer in the sequence.
- *   - if the next producer returns the value of higher quality,
- *   then it is put into the bitmap cache.
- *   - responses from the next producer are passed back down to the consumer.
+ * Checks basic properties of bitmap memory cache producer operation, that is: - it delegates to the
+ * {@link MemoryCache#get(Object)} - if {@link MemoryCache#get(Object)} is unsuccessful, then it
+ * passes the request to the next producer in the sequence. - if the next producer returns the value
+ * of higher quality, then it is put into the bitmap cache. - responses from the next producer are
+ * passed back down to the consumer.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
 public class BitmapMemoryCacheProducerTest {
   private static final String PRODUCER_NAME = BitmapMemoryCacheProducer.PRODUCER_NAME;
   private static final int INTERMEDIATE_SCAN_1 = 2;
@@ -54,9 +52,8 @@ public class BitmapMemoryCacheProducerTest {
   @Mock public Consumer mConsumer;
   @Mock public ProducerContext mProducerContext;
   @Mock public ImageRequest mImageRequest;
-  @Mock public ProducerListener mProducerListener;
+  @Mock public ProducerListener2 mProducerListener;
   @Mock public Exception mException;
-  private final String mRequestId = "mRequestId";
   private BitmapMemoryCacheKey mBitmapMemoryCacheKey;
   private CloseableImage mCloseableImage1;
   private CloseableImage mCloseableImage2;
@@ -87,20 +84,28 @@ public class BitmapMemoryCacheProducerTest {
     when(mMemoryCache.cache(mBitmapMemoryCacheKey, mFinalImageReference))
         .thenReturn(mFinalImageReferenceClone);
     when(mProducerContext.getImageRequest()).thenReturn(mImageRequest);
-    when(mProducerContext.getListener()).thenReturn(mProducerListener);
-    when(mProducerContext.getId()).thenReturn(mRequestId);
+    when(mProducerContext.getProducerListener()).thenReturn(mProducerListener);
     when(mProducerContext.getLowestPermittedRequestLevel())
         .thenReturn(ImageRequest.RequestLevel.FULL_FETCH);
     when(mProducerContext.getCallerContext()).thenReturn(PRODUCER_NAME);
-    when(mProducerListener.requiresExtraMap(mRequestId)).thenReturn(true);
+    when(mProducerListener.requiresExtraMap(mProducerContext, PRODUCER_NAME)).thenReturn(true);
     when(mCacheKeyFactory.getBitmapCacheKey(mImageRequest, PRODUCER_NAME))
         .thenReturn(mBitmapMemoryCacheKey);
 
     when(mImageRequest.isMemoryCacheEnabled()).thenReturn(true);
+    setUpCacheEnabled(true);
+  }
+
+  private void setUpCacheEnabled(boolean enabled) {
+    when(mImageRequest.isCacheEnabled(ImageRequest.CachesLocationsMasks.BITMAP_READ))
+        .thenReturn(enabled);
+    when(mImageRequest.isCacheEnabled(ImageRequest.CachesLocationsMasks.BITMAP_WRITE))
+        .thenReturn(enabled);
   }
 
   @Test
   public void testDisableMemoryCache() {
+    setUpCacheEnabled(false);
     setupBitmapMemoryCacheGetNotFound();
     setupInputProducerStreamingSuccess();
     when(mMemoryCache.get(mBitmapMemoryCacheKey)).thenReturn(null);
@@ -117,17 +122,16 @@ public class BitmapMemoryCacheProducerTest {
         .thenReturn(ImageRequest.RequestLevel.BITMAP_MEMORY_CACHE);
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(mFinalImageReference, Consumer.IS_LAST);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "true");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
-    verify(mProducerListener).onUltimateProducerReached(mRequestId, PRODUCER_NAME, true);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
+    verify(mProducerListener).onUltimateProducerReached(mProducerContext, PRODUCER_NAME, true);
     Assert.assertTrue(!mFinalImageReference.isValid());
   }
 
-  /**
-   * Verify that stateful image results, both intermediate and final, are never cached.
-   */
+  /** Verify that stateful image results, both intermediate and final, are never cached. */
   @Test
   public void testDoNotCacheStatefulImage() {
     when(mCloseableImage1.isStateful()).thenReturn(true);
@@ -141,9 +145,8 @@ public class BitmapMemoryCacheProducerTest {
 
     verify(mConsumer).onNewResult(mIntermediateImageReference, Consumer.NO_FLAGS);
     verify(mConsumer).onNewResult(mFinalImageReference, Consumer.IS_LAST);
-    verify(mMemoryCache, never()).cache(
-        any(BitmapMemoryCacheKey.class),
-        any(CloseableReference.class));
+    verify(mMemoryCache, never())
+        .cache(any(BitmapMemoryCacheKey.class), any(CloseableReference.class));
   }
 
   @Test
@@ -157,9 +160,8 @@ public class BitmapMemoryCacheProducerTest {
     verify(mConsumer).onNewResult(mIntermediateImageReference, Consumer.IS_PARTIAL_RESULT);
     verify(mConsumer)
         .onNewResult(mFinalImageReference, Consumer.IS_LAST | Consumer.IS_PARTIAL_RESULT);
-    verify(mMemoryCache, never()).cache(
-        any(BitmapMemoryCacheKey.class),
-        any(CloseableReference.class));
+    verify(mMemoryCache, never())
+        .cache(any(BitmapMemoryCacheKey.class), any(CloseableReference.class));
   }
 
   @Test
@@ -169,12 +171,13 @@ public class BitmapMemoryCacheProducerTest {
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(mIntermediateImageReference, Consumer.NO_FLAGS);
     verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
     Assert.assertTrue(!mIntermediateImageReference.isValid());
   }
 
@@ -190,12 +193,13 @@ public class BitmapMemoryCacheProducerTest {
     verify(mConsumer).onNewResult(mFinalImageReferenceClone, Consumer.IS_LAST);
     Assert.assertTrue(!mIntermediateImageReferenceClone.isValid());
     Assert.assertTrue(!mFinalImageReferenceClone.isValid());
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   @Test
@@ -214,14 +218,14 @@ public class BitmapMemoryCacheProducerTest {
     Assert.assertTrue(!mIntermediateImageReferenceClone.isValid());
     Assert.assertTrue(!mFinalImageReferenceClone.isValid());
     Assert.assertEquals(
-        0,
-        closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+        0, closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   @Test
@@ -239,14 +243,14 @@ public class BitmapMemoryCacheProducerTest {
     verify(mConsumer).onNewResult(mFinalImageReferenceClone, Consumer.IS_LAST);
     Assert.assertTrue(!mFinalImageReferenceClone.isValid());
     Assert.assertEquals(
-        0,
-        closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+        0, closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   @Test
@@ -264,14 +268,14 @@ public class BitmapMemoryCacheProducerTest {
     verify(mConsumer).onNewResult(mFinalImageReferenceClone, Consumer.IS_LAST);
     Assert.assertTrue(!mFinalImageReferenceClone.isValid());
     Assert.assertEquals(
-        0,
-        closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+        0, closeableImageRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   @Test
@@ -280,12 +284,13 @@ public class BitmapMemoryCacheProducerTest {
     setupInputProducerNotFound();
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   @Test
@@ -295,11 +300,12 @@ public class BitmapMemoryCacheProducerTest {
         .thenReturn(ImageRequest.RequestLevel.BITMAP_MEMORY_CACHE);
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
-    verify(mProducerListener).onUltimateProducerReached(mRequestId, PRODUCER_NAME, false);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
+    verify(mProducerListener).onUltimateProducerReached(mProducerContext, PRODUCER_NAME, false);
     verifyNoMoreInteractions(mInputProducer);
   }
 
@@ -311,11 +317,12 @@ public class BitmapMemoryCacheProducerTest {
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(mIntermediateImageReference, Consumer.NO_FLAGS);
     verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
-    verify(mProducerListener).onUltimateProducerReached(mRequestId, PRODUCER_NAME, false);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
+    verify(mProducerListener).onUltimateProducerReached(mProducerContext, PRODUCER_NAME, false);
     Assert.assertTrue(!mIntermediateImageReference.isValid());
     verifyNoMoreInteractions(mInputProducer);
   }
@@ -326,17 +333,17 @@ public class BitmapMemoryCacheProducerTest {
     setupInputProducerFailure();
     mBitmapMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onFailure(mException);
-    verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
     Map<String, String> extraMap =
         ImmutableMap.of(BitmapMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
-    verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
+    verify(mProducerListener)
+        .onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, extraMap);
     verify(mProducerListener, never())
-        .onUltimateProducerReached(anyString(), anyString(), anyBoolean());
+        .onUltimateProducerReached(eq(mProducerContext), anyString(), anyBoolean());
   }
 
   private void setupBitmapMemoryCacheGetSuccess() {
-    when(mMemoryCache.get(eq(mBitmapMemoryCacheKey)))
-        .thenReturn(mFinalImageReference);
+    when(mMemoryCache.get(eq(mBitmapMemoryCacheKey))).thenReturn(mFinalImageReference);
   }
 
   private void setupBitmapMemoryCacheGetNotFound() {
@@ -344,15 +351,12 @@ public class BitmapMemoryCacheProducerTest {
   }
 
   private void setupBitmapMemoryCacheGetIntermediateImage() {
-    when(mMemoryCache.get(eq(mBitmapMemoryCacheKey)))
-        .thenReturn(mIntermediateImageReference);
+    when(mMemoryCache.get(eq(mBitmapMemoryCacheKey))).thenReturn(mIntermediateImageReference);
   }
 
   private void setupBitmapMemoryCacheGetSuccessOnSecondRead(
       CloseableReference<CloseableImage> closeableImageRef) {
-    when(mMemoryCache.get(mBitmapMemoryCacheKey))
-        .thenReturn(null)
-        .thenReturn(closeableImageRef);
+    when(mMemoryCache.get(mBitmapMemoryCacheKey)).thenReturn(null).thenReturn(closeableImageRef);
   }
 
   private void setupInputProducerStreamingSuccess() {
@@ -361,10 +365,11 @@ public class BitmapMemoryCacheProducerTest {
 
   private void setupInputProducerStreamingSuccessWithStatusFlags(
       final @Consumer.Status int statusFlags) {
-    doAnswer(new ProduceResultsNewResultAnswer(
-            statusFlags,
-            Arrays.asList(mIntermediateImageReference, mFinalImageReference)))
-        .when(mInputProducer).produceResults(any(Consumer.class), eq(mProducerContext));
+    doAnswer(
+            new ProduceResultsNewResultAnswer(
+                statusFlags, Arrays.asList(mIntermediateImageReference, mFinalImageReference)))
+        .when(mInputProducer)
+        .produceResults(any(Consumer.class), eq(mProducerContext));
   }
 
   private void setupInputProducerNotFound() {
@@ -372,12 +377,14 @@ public class BitmapMemoryCacheProducerTest {
         new ArrayList<CloseableReference<CloseableImage>>(1);
     nullArray.add(null);
     doAnswer(new ProduceResultsNewResultAnswer(Consumer.NO_FLAGS, nullArray))
-        .when(mInputProducer).produceResults(any(Consumer.class), eq(mProducerContext));
+        .when(mInputProducer)
+        .produceResults(any(Consumer.class), eq(mProducerContext));
   }
 
   private void setupInputProducerFailure() {
-    doAnswer(new ProduceResultsFailureAnswer()).
-        when(mInputProducer).produceResults(any(Consumer.class), eq(mProducerContext));
+    doAnswer(new ProduceResultsFailureAnswer())
+        .when(mInputProducer)
+        .produceResults(any(Consumer.class), eq(mProducerContext));
   }
 
   private static class ProduceResultsNewResultAnswer implements Answer<Void> {
@@ -386,8 +393,7 @@ public class BitmapMemoryCacheProducerTest {
     private final List<CloseableReference<CloseableImage>> mResults;
 
     private ProduceResultsNewResultAnswer(
-        final @Consumer.Status int statusFlags,
-        List<CloseableReference<CloseableImage>> results) {
+        final @Consumer.Status int statusFlags, List<CloseableReference<CloseableImage>> results) {
       mStatusFlags = statusFlags;
       mResults = results;
     }
@@ -399,8 +405,7 @@ public class BitmapMemoryCacheProducerTest {
       while (iterator.hasNext()) {
         CloseableReference<CloseableImage> result = iterator.next();
         consumer.onNewResult(
-            result,
-            iterator.hasNext() ? mStatusFlags : Consumer.IS_LAST | mStatusFlags);
+            result, iterator.hasNext() ? mStatusFlags : Consumer.IS_LAST | mStatusFlags);
       }
       return null;
     }

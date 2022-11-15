@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,6 +8,7 @@
 package com.facebook.imagepipeline.request;
 
 import static com.facebook.imagepipeline.request.ImageRequest.CacheChoice;
+import static com.facebook.imagepipeline.request.ImageRequest.CachesLocationsMasks;
 import static com.facebook.imagepipeline.request.ImageRequest.RequestLevel;
 
 import android.net.Uri;
@@ -23,13 +24,12 @@ import com.facebook.imagepipeline.core.ImagePipelineExperiments;
 import com.facebook.imagepipeline.listener.RequestListener;
 import javax.annotation.Nullable;
 
-/**
- * Builder class for {@link ImageRequest}s.
- */
+/** Builder class for {@link ImageRequest}s. */
 public class ImageRequestBuilder {
 
   private Uri mSourceUri = null;
   private RequestLevel mLowestPermittedRequestLevel = RequestLevel.FULL_FETCH;
+  private int mCachesDisabled = 0; // All caches enabled by default
   private @Nullable ResizeOptions mResizeOptions = null;
   private @Nullable RotationOptions mRotationOptions = null;
   private ImageDecodeOptions mImageDecodeOptions = ImageDecodeOptions.defaults();
@@ -37,17 +37,18 @@ public class ImageRequestBuilder {
   private boolean mProgressiveRenderingEnabled =
       ImagePipelineConfig.getDefaultImageRequestConfig().isProgressiveRenderingEnabled();
   private boolean mLocalThumbnailPreviewsEnabled = false;
+  private boolean mLoadThumbnailOnly = false;
   private Priority mRequestPriority = Priority.HIGH;
   private @Nullable Postprocessor mPostprocessor = null;
-  private boolean mDiskCacheEnabled = true;
-  private boolean mMemoryCacheEnabled = true;
   private @Nullable Boolean mDecodePrefetches = null;
   private @Nullable RequestListener mRequestListener;
   private @Nullable BytesRange mBytesRange = null;
   private @Nullable Boolean mResizingAllowedOverride = null;
+  private int mDelayMs;
 
   /**
    * Creates a new request builder instance. The setting will be done according to the source type.
+   *
    * @param uri the uri to fetch
    * @return a new request builder instance
    */
@@ -60,13 +61,14 @@ public class ImageRequestBuilder {
    *
    * <p>Only image resources can be used with the image pipeline (PNG, JPG, GIF). Other resource
    * types such as Strings or XML Drawables make no sense in the context of the image pipeline and
-   * so cannot be supported. Attempts to do so will throw an
-   * {@link java.lang.IllegalArgumentException} when the pipeline tries to decode the resource.
+   * so cannot be supported. Attempts to do so will throw an {@link
+   * java.lang.IllegalArgumentException} when the pipeline tries to decode the resource.
    *
    * <p>One potentially confusing case is drawable declared in XML (e.g. ShapeDrawable). This is not
    * an image. If you want to display an XML drawable as the main image, then set it as a
    * placeholder and do not set a URI.
-   * <p/>
+   *
+   * <p>
    *
    * @param resId local image resource id.
    * @return a new request builder instance.
@@ -87,22 +89,25 @@ public class ImageRequestBuilder {
         .setBytesRange(imageRequest.getBytesRange())
         .setCacheChoice(imageRequest.getCacheChoice())
         .setLocalThumbnailPreviewsEnabled(imageRequest.getLocalThumbnailPreviewsEnabled())
+        .setLoadThumbnailOnly(imageRequest.getLoadThumbnailOnly())
         .setLowestPermittedRequestLevel(imageRequest.getLowestPermittedRequestLevel())
+        .setCachesDisabled(imageRequest.getCachesDisabled())
         .setPostprocessor(imageRequest.getPostprocessor())
         .setProgressiveRenderingEnabled(imageRequest.getProgressiveRenderingEnabled())
         .setRequestPriority(imageRequest.getPriority())
         .setResizeOptions(imageRequest.getResizeOptions())
         .setRequestListener(imageRequest.getRequestListener())
         .setRotationOptions(imageRequest.getRotationOptions())
-        .setShouldDecodePrefetches(imageRequest.shouldDecodePrefetches());
+        .setShouldDecodePrefetches(imageRequest.shouldDecodePrefetches())
+        .setDelayMs(imageRequest.getDelayMs());
   }
 
-  private ImageRequestBuilder() {
-  }
+  private ImageRequestBuilder() {}
 
   /**
-   * Sets the source uri (both network and local uris are supported).
-   * Note: this will enable disk caching for network sources, and disable it for local sources.
+   * Sets the source uri (both network and local uris are supported). Note: this will enable disk
+   * caching for network sources, and disable it for local sources.
+   *
    * @param uri the uri to fetch the image from
    * @return the updated builder instance
    */
@@ -120,6 +125,7 @@ public class ImageRequestBuilder {
 
   /**
    * Sets the lowest level that is permitted to request the image from.
+   *
    * @param requestLevel the lowest request level that is allowed
    * @return the updated builder instance
    */
@@ -134,7 +140,24 @@ public class ImageRequestBuilder {
   }
 
   /**
+   * Sets the caches read and write permissions.
+   *
+   * @param cachesDisabled the representation caches permissions
+   * @return the updated builder instance
+   */
+  private ImageRequestBuilder setCachesDisabled(int cachesDisabled) {
+    this.mCachesDisabled = cachesDisabled;
+    return this;
+  }
+
+  /** Gets the caches permissions. */
+  public int getCachesDisabled() {
+    return mCachesDisabled;
+  }
+
+  /**
    * Enables or disables auto-rotate for the image in case image has orientation.
+   *
    * @return the updated builder instance
    * @param enabled
    * @deprecated Use #setRotationOptions(RotationOptions)
@@ -150,11 +173,12 @@ public class ImageRequestBuilder {
 
   /**
    * Sets resize options in case resize should be performed.
+   *
    * @param resizeOptions resize options
    * @return the modified builder instance
    */
   public ImageRequestBuilder setResizeOptions(@Nullable ResizeOptions resizeOptions) {
-    mResizeOptions = resizeOptions;
+    this.mResizeOptions = resizeOptions;
     return this;
   }
 
@@ -173,7 +197,7 @@ public class ImageRequestBuilder {
    * @return the modified builder instance
    */
   public ImageRequestBuilder setRotationOptions(@Nullable RotationOptions rotationOptions) {
-    mRotationOptions = rotationOptions;
+    this.mRotationOptions = rotationOptions;
     return this;
   }
 
@@ -187,7 +211,7 @@ public class ImageRequestBuilder {
    * only used if {@link ImagePipelineExperiments#isPartialImageCachingEnabled()} is true and your
    * {@link com.facebook.imagepipeline.producers.NetworkFetcher} makes use of it.
    *
-   * <p> Even where this is supported, there is no contract that this must be followed. The response
+   * <p>Even where this is supported, there is no contract that this must be followed. The response
    * may contain the full image data, more than is requested or less, depending on what's already in
    * cache and external factors.
    *
@@ -195,7 +219,7 @@ public class ImageRequestBuilder {
    * @return the modified builder instance
    */
   public ImageRequestBuilder setBytesRange(@Nullable BytesRange bytesRange) {
-    mBytesRange = bytesRange;
+    this.mBytesRange = bytesRange;
     return this;
   }
 
@@ -206,7 +230,7 @@ public class ImageRequestBuilder {
   }
 
   public ImageRequestBuilder setImageDecodeOptions(ImageDecodeOptions imageDecodeOptions) {
-    mImageDecodeOptions = imageDecodeOptions;
+    this.mImageDecodeOptions = imageDecodeOptions;
     return this;
   }
 
@@ -215,13 +239,14 @@ public class ImageRequestBuilder {
   }
 
   /**
-   * Sets the cache option. Pipeline might use different caches and eviction policies for each
-   * image type.
+   * Sets the cache option. Pipeline might use different caches and eviction policies for each image
+   * type.
+   *
    * @param cacheChoice the cache choice to set
    * @return the modified builder instance
    */
   public ImageRequestBuilder setCacheChoice(ImageRequest.CacheChoice cacheChoice) {
-    mCacheChoice = cacheChoice;
+    this.mCacheChoice = cacheChoice;
     return this;
   }
 
@@ -232,6 +257,7 @@ public class ImageRequestBuilder {
 
   /**
    * Enables or disables progressive rendering.
+   *
    * @param enabled
    * @return the modified builder instance
    */
@@ -247,6 +273,7 @@ public class ImageRequestBuilder {
 
   /**
    * Enables or disables the use of local thumbnails as previews.
+   *
    * @param enabled
    * @return the modified builder instance
    */
@@ -260,35 +287,58 @@ public class ImageRequestBuilder {
     return mLocalThumbnailPreviewsEnabled;
   }
 
+  public ImageRequestBuilder setLoadThumbnailOnly(boolean loadThumbnailOnly) {
+    this.mLoadThumbnailOnly = loadThumbnailOnly;
+    return this;
+  }
+
+  /** Returns whether the use of local thumbnails for previews is enabled. */
+  public boolean getLoadThumbnailOnly() {
+    return mLoadThumbnailOnly;
+  }
+
   /** Disables disk cache for this request, regardless where the image will come from. */
   public ImageRequestBuilder disableDiskCache() {
-    mDiskCacheEnabled = false;
+    int mask = CachesLocationsMasks.DISK_READ | CachesLocationsMasks.DISK_WRITE;
+    mCachesDisabled = mCachesDisabled | mask;
     return this;
   }
 
   /** Returns whether the use of the disk cache is enabled, which is partly dependent on the URI. */
   public boolean isDiskCacheEnabled() {
-    return mDiskCacheEnabled && UriUtil.isNetworkUri(mSourceUri);
+    int mask = CachesLocationsMasks.DISK_READ | CachesLocationsMasks.DISK_WRITE;
+    return ((mCachesDisabled & mask) == 0) && UriUtil.isNetworkUri(mSourceUri);
   }
 
   /** Disables memory cache for this request. */
   public ImageRequestBuilder disableMemoryCache() {
-    mMemoryCacheEnabled = false;
+    int mask =
+        CachesLocationsMasks.BITMAP_READ
+            | CachesLocationsMasks.BITMAP_WRITE
+            | CachesLocationsMasks.ENCODED_READ
+            | CachesLocationsMasks.ENCODED_WRITE;
+    mCachesDisabled = mCachesDisabled | mask;
     return this;
   }
 
   /** Returns whether the use of the memory cache is enabled. */
   public boolean isMemoryCacheEnabled() {
-    return mMemoryCacheEnabled;
+    int mask =
+        CachesLocationsMasks.BITMAP_READ
+            | CachesLocationsMasks.BITMAP_WRITE
+            | CachesLocationsMasks.ENCODED_READ
+            | CachesLocationsMasks.ENCODED_WRITE;
+    return (mCachesDisabled & mask) == 0;
   }
 
   /**
    * Set priority for the request.
+   *
    * @param requestPriority
    * @return the modified builder instance
    */
   public ImageRequestBuilder setRequestPriority(Priority requestPriority) {
-    mRequestPriority = requestPriority;
+    this.mRequestPriority = requestPriority;
     return this;
   }
 
@@ -299,11 +349,12 @@ public class ImageRequestBuilder {
 
   /**
    * Sets the postprocessor.
+   *
    * @param postprocessor postprocessor to postprocess the output bitmap with.
    * @return the modified builder instance
    */
-  public ImageRequestBuilder setPostprocessor(Postprocessor postprocessor) {
-    mPostprocessor = postprocessor;
+  public ImageRequestBuilder setPostprocessor(@Nullable Postprocessor postprocessor) {
+    this.mPostprocessor = postprocessor;
     return this;
   }
 
@@ -316,23 +367,22 @@ public class ImageRequestBuilder {
    * Sets a request listener to use for just this image request
    *
    * @param requestListener a request listener to use in addition to the global ones set in the
-   * {@link com.facebook.imagepipeline.core.ImagePipelineConfig}
+   *     {@link com.facebook.imagepipeline.core.ImagePipelineConfig}
    * @return the modified builder instance
    */
-  public ImageRequestBuilder setRequestListener(RequestListener requestListener) {
-    mRequestListener = requestListener;
+  public ImageRequestBuilder setRequestListener(@Nullable RequestListener requestListener) {
+    this.mRequestListener = requestListener;
     return this;
   }
 
-  /**
-   * @return the additional request listener to use for this image request
-   */
+  /** @return the additional request listener to use for this image request */
   public @Nullable RequestListener getRequestListener() {
     return mRequestListener;
   }
 
   /**
    * Builds the Request.
+   *
    * @return a valid image request
    */
   public ImageRequest build() {
@@ -350,12 +400,22 @@ public class ImageRequestBuilder {
   }
 
   public ImageRequestBuilder setResizingAllowedOverride(@Nullable Boolean resizingAllowedOverride) {
-    mResizingAllowedOverride = resizingAllowedOverride;
+    this.mResizingAllowedOverride = resizingAllowedOverride;
     return this;
   }
 
   public @Nullable Boolean getResizingAllowedOverride() {
     return mResizingAllowedOverride;
+  }
+
+  public int getDelayMs() {
+    return mDelayMs;
+  }
+
+  /** Add an artificial delay for this image, in milliseconds. */
+  public ImageRequestBuilder setDelayMs(int delayMs) {
+    this.mDelayMs = delayMs;
+    return this;
   }
 
   /** An exception class for builder methods. */

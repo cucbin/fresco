@@ -1,13 +1,8 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.samples.scrollperf.fragments.recycler;
@@ -22,6 +17,7 @@ import com.facebook.drawee.backends.pipeline.PipelineDraweeControllerBuilder;
 import com.facebook.drawee.generic.GenericDraweeHierarchy;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.request.ImageRequestBuilder;
+import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.samples.scrollperf.R;
 import com.facebook.samples.scrollperf.conf.Config;
 import com.facebook.samples.scrollperf.data.SimpleAdapter;
@@ -31,9 +27,8 @@ import com.facebook.samples.scrollperf.util.DraweeUtil;
 import com.facebook.samples.scrollperf.util.PipelineUtil;
 import com.facebook.samples.scrollperf.util.SizeUtil;
 
-/**
- * This is the implementation of the Adapter for the ListView
- */
+/** This is the implementation of the Adapter for the ListView */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DraweeViewListAdapter extends BaseAdapter {
 
   private final SimpleAdapter<Uri> mSimpleAdapter;
@@ -45,10 +40,7 @@ public class DraweeViewListAdapter extends BaseAdapter {
   private final PerfListener mPerfListener;
 
   public DraweeViewListAdapter(
-      Context context,
-      SimpleAdapter<Uri> simpleAdapter,
-      Config config,
-      PerfListener perfListener) {
+      Context context, SimpleAdapter<Uri> simpleAdapter, Config config, PerfListener perfListener) {
     this.mSimpleAdapter = simpleAdapter;
     this.mConfig = config;
     this.mPaddingPx = context.getResources().getDimensionPixelSize(R.dimen.drawee_padding);
@@ -84,16 +76,15 @@ public class DraweeViewListAdapter extends BaseAdapter {
     }
     final Uri uri = getItem(position);
     draweeView.initInstrumentation(uri.toString(), mPerfListener);
-    ImageRequestBuilder imageRequestBuilder = ImageRequestBuilder
-            .newBuilderWithSource(uri)
+    ImageRequestBuilder imageRequestBuilder =
+        ImageRequestBuilder.newBuilderWithSource(uri)
             .setResizeOptions(
-                    new ResizeOptions(
-                            draweeView.getLayoutParams().width,
-                            draweeView.getLayoutParams().height));
+                new ResizeOptions(
+                    draweeView.getLayoutParams().width, draweeView.getLayoutParams().height));
     PipelineUtil.addOptionalFeatures(imageRequestBuilder, mConfig);
     // Create the Builder
-    PipelineDraweeControllerBuilder builder = Fresco.newDraweeControllerBuilder()
-            .setImageRequest(imageRequestBuilder.build());
+    PipelineDraweeControllerBuilder builder =
+        Fresco.newDraweeControllerBuilder().setImageRequest(imageRequestBuilder.build());
     if (mConfig.reuseOldController) {
       builder.setOldController(draweeView.getController());
     }

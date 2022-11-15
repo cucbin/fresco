@@ -1,17 +1,12 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.vito
 
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -19,59 +14,149 @@ import android.view.ViewGroup
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment
 import com.facebook.fresco.samples.showcase.R
 import com.facebook.fresco.samples.showcase.common.SpinnerUtils.setupWithList
-import com.facebook.fresco.samples.showcase.misc.ImageUriProvider
-import com.facebook.fresco.vito.litho.FrescoVitoImage
+import com.facebook.fresco.samples.showcase.databinding.FragmentVitoImageOptionsConfigBinding
+import com.facebook.fresco.samples.showcase.misc.DebugImageListener
+import com.facebook.fresco.vito.litho.FrescoVitoImage2
+import com.facebook.fresco.vito.litho.FrescoVitoTapToRetryImage
 import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.litho.ComponentContext
 import com.facebook.litho.LithoView
-import kotlinx.android.synthetic.main.fragment_vito_image_options_config.*
 
-/** Experimental Fresco Vito fragment that allows to configure ImageOptions via a simple UI.  */
+/** Experimental Fresco Vito fragment that allows to configure ImageOptions via a simple UI. */
 class FrescoVitoLithoImageOptionsConfigFragment : BaseShowcaseFragment() {
 
-    private val imageOptionsBuilder = ImageOptions.create().autoPlay(true)
+  private var _binding: FragmentVitoImageOptionsConfigBinding? = null
+  private val binding
+    get() = _binding!!
+  private val container
+    get() = binding.container
+  private val spinnerRounding
+    get() = binding.spinnerRounding
+  private val spinnerBorder
+    get() = binding.spinnerBorder
+  private val spinnerScaleType
+    get() = binding.spinnerScaleType
+  private val spinnerImageSource
+    get() = binding.spinnerImageSource
+  private val spinnerImageFormat
+    get() = binding.spinnerImageFormat
+  private val spinnerColorFilter
+    get() = binding.spinnerColorFilter
+  private val spinnerPlaceholder
+    get() = binding.spinnerPlaceholder
+  private val spinnerError
+    get() = binding.spinnerError
+  private val spinnerOverlay
+    get() = binding.spinnerOverlay
+  private val spinnerFading
+    get() = binding.spinnerFading
+  private val spinnerProgress
+    get() = binding.spinnerProgress
+  private val spinnerPostprocessor
+    get() = binding.spinnerPostprocessor
+  private val spinnerRotation
+    get() = binding.spinnerRotation
+  private val spinnerResize
+    get() = binding.spinnerResize
+  private val spinnerCustomDrawableFactory
+    get() = binding.spinnerCustomDrawableFactory
+  private val switchAutoPlayAnimations
+    get() = binding.switchAutoPlayAnimations
 
-    private var currentUri: Uri? = null
-    private var componentContext: ComponentContext? = null
-    private var lithoView: LithoView? = null
+  private val imageListener = DebugImageListener()
+  private val imageOptionsBuilder = ImageOptions.create().placeholderApplyRoundingOptions(true)
+  private val imageSourceProvider = ImageSourceConfigurator(sampleUris())
 
-    override fun onCreateView(
-            inflater: LayoutInflater,
-            container: ViewGroup?,
-            savedInstanceState: Bundle?): View? {
-        return inflater.inflate(R.layout.fragment_vito_image_options_config, container, false)
+  private var componentContext: ComponentContext? = null
+  private var lithoView: LithoView? = null
+  private var useTapToRetry = false
+
+  override fun onCreateView(
+      inflater: LayoutInflater,
+      container: ViewGroup?,
+      savedInstanceState: Bundle?
+  ): View? {
+    return inflater.inflate(R.layout.fragment_vito_image_options_config, container, false)
+  }
+
+  override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    componentContext = ComponentContext(context)
+
+    lithoView = LithoView.create(componentContext, createImage(imageOptionsBuilder.build()))
+    container.addView(lithoView)
+
+    container.setOnClickListener { refresh() }
+
+    spinnerRounding.setupWithList(VitoSpinners.roundingOptions) {
+      refresh(imageOptionsBuilder.round(it))
     }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        currentUri = sampleUris().createSampleUri(ImageUriProvider.ImageSize.M)
-        componentContext = ComponentContext(context)
-
-        lithoView = LithoView.create(componentContext, createImage(imageOptionsBuilder.build(), currentUri))
-        container.addView(lithoView)
-
-        spinner_rounding.setupWithList(VitoSpinners.roundingOptions) {
-            refresh(imageOptionsBuilder.round(it))
-        }
-        spinner_border.setupWithList(VitoSpinners.borderOptions) {
-            refresh(imageOptionsBuilder.borders(it))
-        }
-        spinner_scale_type.setupWithList(VitoSpinners.scaleTypes) {
-            refresh(imageOptionsBuilder.scale(it.first).focusPoint(it.second))
-        }
-        spinner_image_format.setupWithList(VitoSpinners.imageFormats) {
-            refresh(uri = sampleUris().create(it))
-        }
+    spinnerBorder.setupWithList(VitoSpinners.borderOptions) {
+      refresh(imageOptionsBuilder.borders(it))
     }
-
-    override fun getTitleId() = R.string.vito_litho_image_options_config
-
-    private fun refresh(builder: ImageOptions.Builder = imageOptionsBuilder, uri: Uri? = currentUri) {
-        currentUri = uri
-        lithoView?.setComponentAsync(createImage(builder.build(), uri))
+    spinnerScaleType.setupWithList(VitoSpinners.scaleTypes) {
+      refresh(imageOptionsBuilder.scale(it.first).focusPoint(it.second))
     }
+    spinnerImageSource.setupWithList(imageSourceProvider.imageSources) {
+      it()
+      refresh()
+    }
+    spinnerImageFormat.setupWithList(imageSourceProvider.imageFormatUpdater) {
+      it()
+      refresh()
+    }
+    spinnerColorFilter.setupWithList(VitoSpinners.colorFilters) {
+      refresh(imageOptionsBuilder.colorFilter(it))
+    }
+    spinnerPlaceholder.setupWithList(VitoSpinners.placeholderOptions) {
+      refresh(it(imageOptionsBuilder))
+    }
+    spinnerError.setupWithList(VitoSpinners.errorOptions) { refresh(it(imageOptionsBuilder)) }
+    spinnerOverlay.setupWithList(VitoSpinners.overlayOptions) { refresh(it(imageOptionsBuilder)) }
+    spinnerFading.setupWithList(VitoSpinners.fadingOptions) {
+      refresh(imageOptionsBuilder.fadeDurationMs(it))
+    }
+    spinnerProgress.setupWithList(VitoSpinners.progressOptions) {
+      refresh(it(requireContext(), imageOptionsBuilder))
+    }
+    spinnerPostprocessor.setupWithList(VitoSpinners.postprocessorOptions) {
+      refresh(it(imageOptionsBuilder))
+    }
+    spinnerRotation.setupWithList(VitoSpinners.rotationOptions) {
+      refresh(imageOptionsBuilder.rotate(it))
+    }
+    spinnerResize.setupWithList(VitoSpinners.resizeOptions) { refresh(it(imageOptionsBuilder)) }
+    spinnerCustomDrawableFactory.setupWithList(VitoSpinners.customDrawableFactoryOptions) {
+      refresh(it(imageOptionsBuilder))
+    }
+    switchAutoPlayAnimations.setOnCheckedChangeListener { _, isChecked ->
+      refresh(imageOptionsBuilder.autoPlay(isChecked))
+    }
+    imageOptionsBuilder.autoPlay(switchAutoPlayAnimations.isChecked)
+  }
 
-    private fun createImage(imageOptions: ImageOptions, uri: Uri?) = FrescoVitoImage.create(componentContext)
-            .uri(uri)
+  private fun refresh(builder: ImageOptions.Builder = imageOptionsBuilder) {
+    lithoView?.setComponentAsync(createImage(builder.build()))
+  }
+
+  private fun createImage(imageOptions: ImageOptions) =
+      if (!useTapToRetry) {
+        FrescoVitoImage2.create(componentContext)
+            .imageSource(imageSourceProvider.imageSource)
             .imageOptions(imageOptions)
+            .imageListener(imageListener)
             .build()
+      } else {
+        FrescoVitoTapToRetryImage.create(componentContext)
+            .imageSource(imageSourceProvider.imageSource)
+            .imageOptions(imageOptions)
+            .retryImageRes(R.drawable.ic_retry_black_48dp)
+            .maxTapCount(5)
+            .imageListener(imageListener)
+            .build()
+      }
+
+  override fun onDestroyView() {
+    super.onDestroyView()
+    _binding = null
+  }
 }

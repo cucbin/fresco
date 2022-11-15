@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,14 +12,18 @@ import com.facebook.common.internal.Preconditions;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
 /**
  * This producer issues to a call to {@link android.graphics.Bitmap#prepareToDraw()} to allow the
  * RendererThread upload the bitmap to GPU asynchronously before it is used. This has no affect on
  * Android versions before N.
  *
- * Controlled via {@link com.facebook.imagepipeline.core.ImagePipelineExperiments#mUseBitmapPrepareToDraw}
+ * <p>Controlled via {@link
+ * com.facebook.imagepipeline.core.ImagePipelineExperiments#mUseBitmapPrepareToDraw}
  */
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class BitmapPrepareProducer implements Producer<CloseableReference<CloseableImage>> {
 
   public static final String PRODUCER_NAME = "BitmapPrepareProducer";
@@ -62,8 +66,9 @@ public class BitmapPrepareProducer implements Producer<CloseableReference<Closea
     }
   }
 
-  private static class BitmapPrepareConsumer extends
-      DelegatingConsumer<CloseableReference<CloseableImage>, CloseableReference<CloseableImage>> {
+  private static class BitmapPrepareConsumer
+      extends DelegatingConsumer<
+          CloseableReference<CloseableImage>, CloseableReference<CloseableImage>> {
 
     private final int mMinBitmapSizeBytes;
     private final int mMaxBitmapSizeBytes;
@@ -79,13 +84,12 @@ public class BitmapPrepareProducer implements Producer<CloseableReference<Closea
 
     @Override
     protected void onNewResultImpl(
-        CloseableReference<CloseableImage> newResult,
-        @Status int status) {
+        @Nullable CloseableReference<CloseableImage> newResult, @Status int status) {
       internalPrepareBitmap(newResult);
       getConsumer().onNewResult(newResult, status);
     }
 
-    private void internalPrepareBitmap(CloseableReference<CloseableImage> newResult) {
+    private void internalPrepareBitmap(@Nullable CloseableReference<CloseableImage> newResult) {
       if (newResult == null || !newResult.isValid()) {
         return;
       }

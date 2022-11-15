@@ -1,16 +1,21 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.backends.pipeline.info;
 
 import com.facebook.common.internal.Objects;
+import com.facebook.fresco.ui.common.ControllerListener2.Extras;
+import com.facebook.fresco.ui.common.DimensionsInfo;
 import com.facebook.imagepipeline.image.ImageInfo;
 import com.facebook.imagepipeline.request.ImageRequest;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class ImagePerfData {
 
   public static final int UNSET = -1;
@@ -20,6 +25,11 @@ public class ImagePerfData {
   private final @Nullable Object mCallerContext;
   private final @Nullable ImageRequest mImageRequest;
   private final @Nullable ImageInfo mImageInfo;
+
+  // Controller image metadata
+  private final @Nullable ImageRequest mControllerImageRequest;
+  private final @Nullable ImageRequest mControllerLowResImageRequest;
+  private final @Nullable ImageRequest[] mControllerFirstAvailableImageRequests;
 
   private final long mControllerSubmitTimeMs;
   private final long mControllerIntermediateImageSetTimeMs;
@@ -36,12 +46,20 @@ public class ImagePerfData {
   private final int mOnScreenWidthPx;
   private final int mOnScreenHeightPx;
 
+  private final @Nullable Throwable mErrorThrowable;
+
   // Visibility
   @VisibilityState private final int mVisibilityState;
   private final long mVisibilityEventTimeMs;
   private final long mInvisibilityEventTimeMs;
 
-  @Nullable private final String mComponentTag;
+  private final @Nullable String mComponentTag;
+
+  private final long mImageDrawTimeMs;
+
+  private final @Nullable DimensionsInfo mDimensionsInfo;
+
+  private @Nullable Extras mExtraData;
 
   public ImagePerfData(
       @Nullable String controllerId,
@@ -49,6 +67,9 @@ public class ImagePerfData {
       @Nullable ImageRequest imageRequest,
       @Nullable Object callerContext,
       @Nullable ImageInfo imageInfo,
+      @Nullable ImageRequest controllerImageRequest,
+      @Nullable ImageRequest controllerLowResImageRequest,
+      @Nullable ImageRequest[] controllerFirstAvailableImageRequests,
       long controllerSubmitTimeMs,
       long controllerIntermediateImageSetTimeMs,
       long controllerFinalImageSetTimeMs,
@@ -61,15 +82,22 @@ public class ImagePerfData {
       boolean isPrefetch,
       int onScreenWidthPx,
       int onScreenHeightPx,
+      @Nullable Throwable errorThrowable,
       int visibilityState,
       long visibilityEventTimeMs,
       long invisibilityEventTime,
-      @Nullable String componentTag) {
+      @Nullable String componentTag,
+      long imageDrawTimeMs,
+      @Nullable DimensionsInfo dimensionsInfo,
+      @Nullable Extras extraData) {
     mControllerId = controllerId;
     mRequestId = requestId;
     mImageRequest = imageRequest;
     mCallerContext = callerContext;
     mImageInfo = imageInfo;
+    mControllerImageRequest = controllerImageRequest;
+    mControllerLowResImageRequest = controllerLowResImageRequest;
+    mControllerFirstAvailableImageRequests = controllerFirstAvailableImageRequests;
     mControllerSubmitTimeMs = controllerSubmitTimeMs;
     mControllerIntermediateImageSetTimeMs = controllerIntermediateImageSetTimeMs;
     mControllerFinalImageSetTimeMs = controllerFinalImageSetTimeMs;
@@ -82,10 +110,18 @@ public class ImagePerfData {
     mIsPrefetch = isPrefetch;
     mOnScreenWidthPx = onScreenWidthPx;
     mOnScreenHeightPx = onScreenHeightPx;
+    mErrorThrowable = errorThrowable;
     mVisibilityState = visibilityState;
     mVisibilityEventTimeMs = visibilityEventTimeMs;
     mInvisibilityEventTimeMs = invisibilityEventTime;
     mComponentTag = componentTag;
+    mImageDrawTimeMs = imageDrawTimeMs;
+    mDimensionsInfo = dimensionsInfo;
+    mExtraData = extraData;
+  }
+
+  public long getImageDrawTimeMs() {
+    return mImageDrawTimeMs;
   }
 
   @Nullable
@@ -129,6 +165,21 @@ public class ImagePerfData {
     return mControllerFailureTimeMs;
   }
 
+  @Nullable
+  public ImageRequest getControllerImageRequest() {
+    return mControllerImageRequest;
+  }
+
+  @Nullable
+  public ImageRequest getControllerLowResImageRequest() {
+    return mControllerLowResImageRequest;
+  }
+
+  @Nullable
+  public ImageRequest[] getControllerFirstAvailableImageRequests() {
+    return mControllerFirstAvailableImageRequests;
+  }
+
   public long getImageRequestStartTimeMs() {
     return mImageRequestStartTimeMs;
   }
@@ -158,6 +209,11 @@ public class ImagePerfData {
     return mOnScreenHeightPx;
   }
 
+  @Nullable
+  public Throwable getErrorThrowable() {
+    return mErrorThrowable;
+  }
+
   public long getFinalImageLoadTimeMs() {
     if (getImageRequestEndTimeMs() == UNSET || getImageRequestStartTimeMs() == UNSET) {
       return UNSET;
@@ -167,11 +223,7 @@ public class ImagePerfData {
   }
 
   public long getIntermediateImageLoadTimeMs() {
-    if (getControllerIntermediateImageSetTimeMs() == UNSET || getControllerSubmitTimeMs() == UNSET) {
-      return UNSET;
-    }
-
-    return getControllerIntermediateImageSetTimeMs() - getControllerSubmitTimeMs();
+    return mControllerIntermediateImageSetTimeMs;
   }
 
   public int getVisibilityState() {
@@ -191,10 +243,27 @@ public class ImagePerfData {
     return mComponentTag;
   }
 
+  @Nullable
+  public DimensionsInfo getDimensionsInfo() {
+    return mDimensionsInfo;
+  }
+
+  @Nullable
+  public Extras getExtraData() {
+    return mExtraData;
+  }
+
+  public void setExtraData(Extras extraData) {
+    mExtraData = extraData;
+  }
+
   public String createDebugString() {
     return Objects.toStringHelper(this)
         .add("controller ID", mControllerId)
         .add("request ID", mRequestId)
+        .add("controller image request", mControllerImageRequest)
+        .add("controller low res image request", mControllerLowResImageRequest)
+        .add("controller first available image requests", mControllerFirstAvailableImageRequests)
         .add("controller submit", mControllerSubmitTimeMs)
         .add("controller final image", mControllerFinalImageSetTimeMs)
         .add("controller failure", mControllerFailureTimeMs)
@@ -211,6 +280,11 @@ public class ImagePerfData {
         .add("on-screen height", mOnScreenHeightPx)
         .add("visibility state", mVisibilityState)
         .add("component tag", mComponentTag)
+        .add("visibility event", mVisibilityEventTimeMs)
+        .add("invisibility event", mInvisibilityEventTimeMs)
+        .add("image draw event", mImageDrawTimeMs)
+        .add("dimensions info", mDimensionsInfo)
+        .add("extra data", mExtraData)
         .toString();
   }
 }

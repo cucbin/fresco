@@ -1,13 +1,16 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.backends.pipeline.info;
 
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Collection;
 
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class ForwardingImagePerfDataListener implements ImagePerfDataListener {
 
   private final Collection<ImagePerfDataListener> mListeners;

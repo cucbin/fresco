@@ -1,10 +1,21 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.SampleDeps
+import com.facebook.fresco.buildsrc.TestDeps
+
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-kapt'
 
 android {
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
 
     dexOptions {
         maxProcessCount 2
@@ -13,8 +24,8 @@ android {
 
     defaultConfig {
         applicationId "com.facebook.fresco.samples.showcase"
-        minSdkVersion rootProject.ext.samplesMinSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion FrescoConfig.samplesMinSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
         versionCode 1
         versionName "${VERSION_NAME}"
 
@@ -22,6 +33,8 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables.useSupportLibrary = true // needed for tinting
+
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -43,16 +56,17 @@ android {
 
     testBuildType "instrumentation"
 
-
     flavorDimensions "main"
     productFlavors {
         normal {
-        }
-        instantRunConfig {
             dimension "main"
-            minSdkVersion 21
+        }
+        fast {
+            dimension "main"
+            minSdkVersion FrescoConfig.targetSdkVersion
         }
         internal {
+            dimension "main"
         }
     }
 
@@ -69,19 +83,24 @@ android {
             universalApk false
         }
     }
+
+    buildFeatures {
+        viewBinding true
+    }
 }
 
 dependencies {
-    compileOnly "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
+    compileOnly Deps.jsr305
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.javaxAnnotation
 
-    implementation "androidx.appcompat:appcompat:${versions.androidx.appcompat}"
-    implementation "androidx.preference:preference:${versions.androidx.preference}"
-    implementation "androidx.recyclerview:recyclerview:${versions.androidx.recyclerview}"
-    implementation "androidx.cardview:cardview:1.0.0"
-    implementation "androidx.legacy:legacy-support-v4:1.0.0"
+    implementation SampleDeps.AndroidX.appcompat
+    implementation SampleDeps.AndroidX.preference
+    implementation SampleDeps.AndroidX.recyclerview
+    implementation SampleDeps.AndroidX.cardview
 
-    implementation "com.google.android.material:material:1.1.0-alpha03"
-    implementation "com.facebook.stetho:stetho-okhttp3:${STETHO_VERSION}"
+    implementation SampleDeps.Google.material
+    implementation Deps.Tools.Stetho.okhttp3
 
     implementation project(':animated-base')
     implementation project(':animated-gif')
@@ -95,38 +114,55 @@ dependencies {
     implementation project(':drawee-span')
     implementation project(':imagepipeline-backends:imagepipeline-okhttp3')
     implementation project(':tools:stetho')
-    implementation project(path: ':imagepipeline-backends:imagepipeline-okhttp3')
 
     implementation 'com.facebook.keyframes:keyframes:1.0'
 
+    implementation project(':ui-common')
+
     // Litho
-    compileOnly "com.facebook.litho:litho-annotations:${versions.litho}"
-    implementation "com.facebook.litho:litho-core:${versions.litho}"
-    implementation "com.facebook.litho:litho-widget:${versions.litho}"
+    compileOnly Deps.Litho.lithoAnnotations
+    implementation Deps.Litho.core
+    implementation Deps.Litho.widget
+
     // Litho Sections
-    implementation "com.facebook.litho:litho-sections-core:${versions.litho}"
-    implementation "com.facebook.litho:litho-sections-widget:${versions.litho}"
-    compileOnly "com.facebook.litho:litho-sections-annotations:${versions.litho}"
-    annotationProcessor "com.facebook.litho:litho-sections-processor:${versions.litho}"
+    implementation Deps.Litho.Sections.core
+    implementation Deps.Litho.Sections.widget
+    compileOnly Deps.Litho.Sections.sectionsAnnotations
+    kapt Deps.Litho.Sections.processor
 
     // Experimental Fresco Vito
     implementation project(':vito:core')
+    implementation project(':vito:core-common-impl')
+    implementation project(':vito:core-impl')
+    implementation project(':vito:drawee-support')
+    implementation project(':vito:init')
+    implementation project(':vito:ktx')
     implementation project(':vito:litho')
+    implementation project(':vito:litho-slideshow')
     implementation project(':vito:options')
+    implementation project(':vito:provider')
+    implementation project(':vito:renderer')
+    implementation project(':vito:source')
+    implementation project(':vito:textspan')
+    implementation project(':vito:tools:liveeditor')
+    implementation project(':vito:view')
 
     // Only used for the custom SVG decoder
-    implementation 'com.caverock:androidsvg:1.2.1'
+    implementation SampleDeps.Showcase.caverockSvg
 
     // Testing-only dependencies
-    androidTestImplementation "androidx.test.espresso:espresso-core:${versions.androidx.espresso}"
-    androidTestImplementation "androidx.test:rules:${versions.androidx.test}"
-    androidTestImplementation "androidx.test:runner:${versions.androidx.test}"
-    androidTestImplementation "junit:junit:${JUNIT_VERSION}"
+    androidTestImplementation TestDeps.AndroidX.espressoCore
+    androidTestImplementation TestDeps.AndroidX.testRules
+    androidTestImplementation TestDeps.AndroidX.testRunner
+    androidTestImplementation TestDeps.junit
 
-    implementation('com.facebook.flipper:flipper:0.17.0') {
+    implementation(Deps.Tools.Flipper.flipper)
+    implementation(Deps.Tools.Flipper.fresco) {
         exclude group: 'com.facebook.fresco'
     }
     implementation project(':tools:flipper')
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${versions.kotlin}"
+    implementation Deps.Kotlin.stdlibJdk
+
+    implementation SampleDeps.AndroidX.multidex
 }

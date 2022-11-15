@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,24 +16,22 @@ import android.os.Build;
 import android.util.Pair;
 import androidx.core.util.Pools;
 import com.facebook.common.internal.Preconditions;
+import com.facebook.common.memory.DecodeBufferHelper;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
-/**
- * This class contains utility method for Bitmap
- */
+/** This class contains utility method for Bitmap */
+@Nullsafe(Nullsafe.Mode.STRICT)
 public final class BitmapUtil {
-  private static final int DECODE_BUFFER_SIZE = 16 * 1024;
   private static final int POOL_SIZE = 12;
-  private static final Pools.SynchronizedPool<ByteBuffer> DECODE_BUFFERS =
-      new Pools.SynchronizedPool<>(POOL_SIZE);
+  private static Pools.SynchronizedPool<ByteBuffer> DECODE_BUFFERS;
 
-  /**
-   * Bytes per pixel definitions
-   */
+  /** Bytes per pixel definitions */
   public static final int ALPHA_8_BYTES_PER_PIXEL = 1;
+
   public static final int ARGB_4444_BYTES_PER_PIXEL = 2;
   public static final int ARGB_8888_BYTES_PER_PIXEL = 4;
   public static final int RGB_565_BYTES_PER_PIXEL = 2;
@@ -41,9 +39,9 @@ public final class BitmapUtil {
 
   public static final float MAX_BITMAP_SIZE = 2048f;
 
-  /**
-   * @return size in bytes of the underlying bitmap
-   */
+  private static boolean sUseDecodeBufferHelper;
+
+  /** @return size in bytes of the underlying bitmap */
   @SuppressLint("NewApi")
   public static int getSizeInBytes(@Nullable Bitmap bitmap) {
     if (bitmap == null) {
@@ -60,13 +58,7 @@ public final class BitmapUtil {
         // Swallow exception and try fallbacks.
       }
     }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR1) {
-      return bitmap.getByteCount();
-    }
-
-    // Estimate for earlier platforms. Same code as getByteCount() for Honeycomb.
-    return bitmap.getRowBytes() * bitmap.getHeight();
+    return bitmap.getByteCount();
   }
 
   /**
@@ -106,9 +98,9 @@ public final class BitmapUtil {
    */
   public static @Nullable Pair<Integer, Integer> decodeDimensions(InputStream is) {
     Preconditions.checkNotNull(is);
-    ByteBuffer byteBuffer = DECODE_BUFFERS.acquire();
+    ByteBuffer byteBuffer = acquireByteBuffer();
     if (byteBuffer == null) {
-      byteBuffer = ByteBuffer.allocate(DECODE_BUFFER_SIZE);
+      byteBuffer = ByteBuffer.allocate(DecodeBufferHelper.getRecommendedDecodeBufferSize());
     }
     BitmapFactory.Options options = new BitmapFactory.Options();
     options.inJustDecodeBounds = true;
@@ -120,7 +112,7 @@ public final class BitmapUtil {
           ? null
           : new Pair<>(options.outWidth, options.outHeight);
     } finally {
-      DECODE_BUFFERS.release(byteBuffer);
+      releaseByteBuffer(byteBuffer);
     }
   }
 
@@ -133,9 +125,9 @@ public final class BitmapUtil {
    */
   public static ImageMetaData decodeDimensionsAndColorSpace(InputStream is) {
     Preconditions.checkNotNull(is);
-    ByteBuffer byteBuffer = DECODE_BUFFERS.acquire();
+    @Nullable ByteBuffer byteBuffer = acquireByteBuffer();
     if (byteBuffer == null) {
-      byteBuffer = ByteBuffer.allocate(DECODE_BUFFER_SIZE);
+      byteBuffer = ByteBuffer.allocate(DecodeBufferHelper.getRecommendedDecodeBufferSize());
     }
     BitmapFactory.Options options = new BitmapFactory.Options();
     options.inJustDecodeBounds = true;
@@ -149,15 +141,16 @@ public final class BitmapUtil {
       }
       return new ImageMetaData(options.outWidth, options.outHeight, colorSpace);
     } finally {
-      DECODE_BUFFERS.release(byteBuffer);
+      releaseByteBuffer(byteBuffer);
     }
   }
 
   /**
-   * Returns the amount of bytes used by a pixel in a specific
-   * {@link android.graphics.Bitmap.Config}
-   * @param bitmapConfig the {@link android.graphics.Bitmap.Config} for which the size in byte
-   * will be returned
+   * Returns the amount of bytes used by a pixel in a specific {@link
+   * android.graphics.Bitmap.Config}
+   *
+   * @param bitmapConfig the {@link android.graphics.Bitmap.Config} for which the size in byte will
+   *     be returned
    * @return
    */
   public static int getPixelSizeForBitmapConfig(Bitmap.Config bitmapConfig) {
@@ -173,20 +166,49 @@ public final class BitmapUtil {
         return RGB_565_BYTES_PER_PIXEL;
       case RGBA_F16:
         return RGBA_F16_BYTES_PER_PIXEL;
+      case HARDWARE:
+        // We assume ARGB_8888 is used underneath
+        return ARGB_8888_BYTES_PER_PIXEL;
     }
     throw new UnsupportedOperationException("The provided Bitmap.Config is not supported");
   }
 
   /**
-   * Returns the size in byte of an image with specific size
-   * and {@link android.graphics.Bitmap.Config}
+   * Returns the size in byte of an image with specific size and {@link
+   * android.graphics.Bitmap.Config}
+   *
    * @param width the width of the image
    * @param height the height of the image
-   * @param bitmapConfig the {@link android.graphics.Bitmap.Config} for which the size in byte
-   * will be returned
+   * @param bitmapConfig the {@link android.graphics.Bitmap.Config} for which the size in byte will
+   *     be returned
    * @return
    */
   public static int getSizeInByteForBitmap(int width, int height, Bitmap.Config bitmapConfig) {
     return width * height * getPixelSizeForBitmapConfig(bitmapConfig);
+  }
+
+  private static @Nullable ByteBuffer acquireByteBuffer() {
+    if (sUseDecodeBufferHelper) {
+      return DecodeBufferHelper.INSTANCE.acquire();
+    } else {
+      if (DECODE_BUFFERS == null) {
+        synchronized (BitmapUtil.class) {
+          if (DECODE_BUFFERS == null) {
+            DECODE_BUFFERS = new Pools.SynchronizedPool<>(POOL_SIZE);
+          }
+        }
+      }
+      return DECODE_BUFFERS.acquire();
+    }
+  }
+
+  private static void releaseByteBuffer(ByteBuffer byteBuffer) {
+    if (!sUseDecodeBufferHelper) {
+      DECODE_BUFFERS.release(byteBuffer);
+    }
+  }
+
+  public static void setUseDecodeBufferHelper(boolean useDecodeBufferHelper) {
+    sUseDecodeBufferHelper = useDecodeBufferHelper;
   }
 }

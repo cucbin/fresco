@@ -1,14 +1,13 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.animation.backend;
 
-/**
- * Basic animation metadata: Frame and loop count & duration
- */
+/** Basic animation metadata: Frame and loop count & duration */
 public interface AnimationInformation {
 
   /**

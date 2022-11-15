@@ -1,18 +1,17 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase
 
 import android.app.Application
-import android.content.Context
+import android.content.res.Resources
+import androidx.preference.PreferenceManager
+import com.facebook.common.executors.UiThreadImmediateExecutorService
+import com.facebook.common.internal.Suppliers
 import com.facebook.common.logging.FLog
 import com.facebook.common.memory.manager.NoOpDebugMemoryManager
 import com.facebook.drawee.backends.pipeline.DraweeConfig
@@ -21,7 +20,6 @@ import com.facebook.drawee.backends.pipeline.info.ImagePerfData
 import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener
 import com.facebook.flipper.android.AndroidFlipperClient
 import com.facebook.flipper.android.utils.FlipperUtils
-import com.facebook.flipper.core.FlipperClient
 import com.facebook.flipper.perflogger.NoOpFlipperPerfLogger
 import com.facebook.flipper.plugins.fresco.FrescoFlipperPlugin
 import com.facebook.flipper.plugins.fresco.FrescoFlipperRequestListener
@@ -29,121 +27,170 @@ import com.facebook.flipper.plugins.inspector.DescriptorMapping
 import com.facebook.flipper.plugins.inspector.InspectorFlipperPlugin
 import com.facebook.fresco.samples.showcase.misc.DebugOverlaySupplierSingleton
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider
+import com.facebook.fresco.samples.showcase.misc.LogcatRequestListener2
+import com.facebook.fresco.samples.showcase.settings.SettingsFragment.KEY_VITO_KOTLIN
+import com.facebook.fresco.vito.core.DefaultFrescoVitoConfig
+import com.facebook.fresco.vito.core.FrescoVitoConfig
+import com.facebook.fresco.vito.core.impl.DebugOverlayHandler
+import com.facebook.fresco.vito.init.FrescoVito
+import com.facebook.fresco.vito.provider.FrescoVitoProvider
+import com.facebook.fresco.vito.provider.impl.NoOpCallerContextVerifier
+import com.facebook.fresco.vito.provider.impl.kotlin.KFrescoVitoProvider
+import com.facebook.fresco.vito.tools.liveeditor.ImageSelector
+import com.facebook.fresco.vito.tools.liveeditor.ImageTracker
 import com.facebook.imagepipeline.backends.okhttp3.OkHttpImagePipelineConfigFactory
 import com.facebook.imagepipeline.core.ImagePipelineConfig
+import com.facebook.imagepipeline.core.ImagePipelineFactory
 import com.facebook.imagepipeline.debug.FlipperCacheKeyFactory
 import com.facebook.imagepipeline.debug.FlipperImageTracker
 import com.facebook.imagepipeline.decoder.SimpleProgressiveJpegConfig
 import com.facebook.imagepipeline.listener.ForwardingRequestListener
 import com.facebook.imagepipeline.listener.RequestListener
 import com.facebook.imagepipeline.listener.RequestLoggingListener
-import com.facebook.imagepipeline.memory.BitmapCounterConfig
-import com.facebook.imagepipeline.memory.BitmapCounterProvider
 import com.facebook.imagepipeline.stetho.FrescoStethoPlugin
-import com.facebook.stetho.DumperPluginsProvider
 import com.facebook.stetho.Stetho
-import com.facebook.stetho.dumpapp.DumperPlugin
 import com.facebook.stetho.okhttp3.StethoInterceptor
-import java.util.HashSet
 import okhttp3.OkHttpClient
 
-/**
- * Showcase Application implementation where we set up Fresco
- */
+/** Showcase Application implementation where we set up Fresco */
 class ShowcaseApplication : Application() {
 
-    private var frescoFlipperPlugin: FrescoFlipperPlugin? = null
+  private var frescoFlipperPlugin: FrescoFlipperPlugin? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        imageUriProvider = ImageUriProvider(applicationContext)
-        FLog.setMinimumLoggingLevel(FLog.VERBOSE)
-        val forwardingRequestListener = ForwardingRequestListener()
-        val requestListeners = HashSet<RequestListener>().apply {
-            add(forwardingRequestListener)
-            add(RequestLoggingListener())
+  override fun onCreate() {
+    super.onCreate()
+    imageUriProvider = ImageUriProvider(applicationContext)
+    FLog.setMinimumLoggingLevel(FLog.VERBOSE)
+    val forwardingRequestListener = ForwardingRequestListener()
+    val requestListeners =
+        HashSet<RequestListener>().apply {
+          add(forwardingRequestListener)
+          add(RequestLoggingListener())
         }
 
-        val okHttpClient = OkHttpClient.Builder()
-                .addNetworkInterceptor(StethoInterceptor())
-                .build()
+    val requestListener2s = setOf(LogcatRequestListener2())
 
-        val imagePipelineConfigBuilder = OkHttpImagePipelineConfigFactory.newBuilder(this, okHttpClient)
-                .setRequestListeners(requestListeners)
-                .setProgressiveJpegConfig(SimpleProgressiveJpegConfig())
-                .setImageDecoderConfig(CustomImageFormatConfigurator.createImageDecoderConfig(this))
-                .experiment()
-                .setBitmapPrepareToDraw(true, 0, Integer.MAX_VALUE, true)
+    val okHttpClient = OkHttpClient.Builder().addNetworkInterceptor(StethoInterceptor()).build()
 
-        if (shouldEnableFlipper()) {
-            imagePipelineConfigBuilder.setCacheKeyFactory(
-                    FlipperCacheKeyFactory(sFlipperImageTracker))
-        }
+    val imagePipelineConfigBuilder =
+        OkHttpImagePipelineConfigFactory.newBuilder(this, okHttpClient)
+            .setRequestListeners(requestListeners)
+            .setRequestListener2s(requestListener2s)
+            .setProgressiveJpegConfig(SimpleProgressiveJpegConfig())
+            .setImageDecoderConfig(CustomImageFormatConfigurator.createImageDecoderConfig(this))
+            .experiment()
+            .setBitmapPrepareToDraw(true, 0, Integer.MAX_VALUE, true)
 
-        val imagePipelineConfig = imagePipelineConfigBuilder.build()
-        ImagePipelineConfig.getDefaultImageRequestConfig().isProgressiveRenderingEnabled = true
+    if (shouldEnableFlipper()) {
+      imagePipelineConfigBuilder.setCacheKeyFactory(FlipperCacheKeyFactory(sFlipperImageTracker))
+    }
 
-        val draweeConfigBuilder = DraweeConfig.newBuilder()
-        CustomImageFormatConfigurator.addCustomDrawableFactories(this, draweeConfigBuilder)
+    imagePipelineConfigBuilder.experiment().setDownsampleIfLargeBitmap(true)
 
-        draweeConfigBuilder.setDebugOverlayEnabledSupplier(
-                DebugOverlaySupplierSingleton.getInstance(applicationContext))
+    val imagePipelineConfig = imagePipelineConfigBuilder.build()
+    ImagePipelineConfig.defaultImageRequestConfig.isProgressiveRenderingEnabled = true
 
-        if (shouldEnableFlipper()) {
-            draweeConfigBuilder.setImagePerfDataListener(
-                    object : ImagePerfDataListener {
-                        override fun onImageLoadStatusUpdated(imagePerfData: ImagePerfData, imageLoadStatus: Int) {
-                            frescoFlipperPlugin?.flipperImageTracker?.onImageLoadStatusUpdated(imagePerfData, imageLoadStatus)
-                            frescoFlipperPlugin?.onImageLoadStatusUpdated(imagePerfData, imageLoadStatus)
-                        }
+    val draweeConfigBuilder = DraweeConfig.newBuilder()
+    CustomImageFormatConfigurator.addCustomDrawableFactories(this, draweeConfigBuilder)
 
-                        override fun onImageVisibilityUpdated(imagePerfData: ImagePerfData, visibilityState: Int) {
-                            // nop
-                        }
-                    })
-        }
+    draweeConfigBuilder.setDebugOverlayEnabledSupplier(
+        DebugOverlaySupplierSingleton.getInstance(applicationContext))
 
-        BitmapCounterProvider.initialize(
-                BitmapCounterConfig.newBuilder()
-                        .setMaxBitmapCount(BitmapCounterConfig.DEFAULT_MAX_BITMAP_COUNT)
-                        .build())
-        Fresco.initialize(this, imagePipelineConfig, draweeConfigBuilder.build())
-
-        val context = this
-        Stetho.initialize(
-                Stetho.newInitializerBuilder(context)
-                        .enableDumpapp {
-                            Stetho.DefaultDumperPluginsBuilder(context)
-                                    .provide(FrescoStethoPlugin())
-                                    .finish()
-                        }
-                        .enableWebKitInspector(Stetho.defaultInspectorModulesProvider(context))
-                        .build())
-
-        if (shouldEnableFlipper()) {
-            frescoFlipperPlugin = FrescoFlipperPlugin(
-                    sFlipperImageTracker,
-                    Fresco.getImagePipelineFactory().platformBitmapFactory,
-                    null,
-                    NoOpDebugMemoryManager(),
-                    NoOpFlipperPerfLogger(), null)
-            forwardingRequestListener.addRequestListener(
-                    FrescoFlipperRequestListener(frescoFlipperPlugin!!.flipperImageTracker))
-            AndroidFlipperClient.getInstance(context).apply {
-                addPlugin(InspectorFlipperPlugin(context, DescriptorMapping.withDefaults()))
-                addPlugin(frescoFlipperPlugin)
-                start()
+    if (shouldEnableFlipper()) {
+      draweeConfigBuilder.setImagePerfDataListener(
+          object : ImagePerfDataListener {
+            override fun onImageLoadStatusUpdated(
+                imagePerfData: ImagePerfData,
+                imageLoadStatus: Int
+            ) {
+              frescoFlipperPlugin
+                  ?.flipperImageTracker
+                  ?.onImageLoadStatusUpdated(imagePerfData, imageLoadStatus)
+              frescoFlipperPlugin?.onImageLoadStatusUpdated(imagePerfData, imageLoadStatus)
             }
-        }
+
+            override fun onImageVisibilityUpdated(
+                imagePerfData: ImagePerfData,
+                visibilityState: Int
+            ) {
+              // nop
+            }
+          })
     }
 
-    private fun shouldEnableFlipper(): Boolean {
-        return BuildConfig.DEBUG && FlipperUtils.shouldEnableFlipper(this)
-    }
+    Fresco.initialize(this, imagePipelineConfig, draweeConfigBuilder.build())
+    imageTracker = ImageTracker()
+    initVito(resources)
+    imageSelector =
+        ImageSelector(
+            imageTracker, FrescoVitoProvider.getImagePipeline(), FrescoVitoProvider.getController())
+    val context = this
+    Stetho.initialize(
+        Stetho.newInitializerBuilder(context)
+            .enableDumpapp {
+              Stetho.DefaultDumperPluginsBuilder(context).provide(FrescoStethoPlugin()).finish()
+            }
+            .enableWebKitInspector(Stetho.defaultInspectorModulesProvider(context))
+            .build())
 
-    companion object {
-        private val sFlipperImageTracker = FlipperImageTracker()
-        lateinit var imageUriProvider: ImageUriProvider
-            private set
+    if (shouldEnableFlipper()) {
+      frescoFlipperPlugin =
+          FrescoFlipperPlugin(
+              sFlipperImageTracker,
+              Fresco.getImagePipelineFactory().platformBitmapFactory,
+              null,
+              NoOpDebugMemoryManager(),
+              NoOpFlipperPerfLogger(),
+              null,
+              null)
+      forwardingRequestListener.addRequestListener(
+          FrescoFlipperRequestListener(frescoFlipperPlugin!!.flipperImageTracker))
+      AndroidFlipperClient.getInstance(context).apply {
+        addPlugin(InspectorFlipperPlugin(context, DescriptorMapping.withDefaults()))
+        addPlugin(frescoFlipperPlugin)
+        start()
+      }
     }
+  }
+
+  private fun initVito(
+      resources: Resources,
+      vitoConfig: FrescoVitoConfig = DefaultFrescoVitoConfig(),
+  ) {
+    if (PreferenceManager.getDefaultSharedPreferences(this).getBoolean(KEY_VITO_KOTLIN, false)) {
+      FrescoVito.initialize(
+          KFrescoVitoProvider(
+              vitoConfig,
+              ImagePipelineFactory.getInstance().imagePipeline,
+              FrescoVito.createImagePipelineUtils(Suppliers.BOOLEAN_TRUE),
+              ImagePipelineFactory.getInstance()
+                  .imagePipeline
+                  .config
+                  .executorSupplier
+                  .forLightweightBackgroundTasks(),
+              UiThreadImmediateExecutorService.getInstance(),
+              NoOpCallerContextVerifier,
+              DebugOverlayHandler(DebugOverlaySupplierSingleton.getInstance(applicationContext))))
+    } else {
+      FrescoVito.initialize(
+          vitoConfig = vitoConfig,
+          debugOverlayEnabledSupplier =
+              DebugOverlaySupplierSingleton.getInstance(applicationContext),
+          vitoImagePerfListener = imageTracker)
+    }
+  }
+
+  private fun shouldEnableFlipper(): Boolean {
+    return BuildConfig.DEBUG && FlipperUtils.shouldEnableFlipper(this)
+  }
+
+  companion object {
+    private val sFlipperImageTracker = FlipperImageTracker()
+    lateinit var imageTracker: ImageTracker
+      private set
+    lateinit var imageUriProvider: ImageUriProvider
+      private set
+    lateinit var imageSelector: ImageSelector
+      private set
+  }
 }

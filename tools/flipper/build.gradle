@@ -1,26 +1,35 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 dependencies {
-    compileOnly "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
-    compileOnly "javax.annotation:javax.annotation-api:${ANNOTATION_API_VERSION}"
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.jsr305
+    compileOnly Deps.javaxAnnotation
 
     implementation project(':drawee-backends:drawee-pipeline')
     implementation project(':imagepipeline')
+    implementation project(':imagepipeline-native')
+    implementation project(':memory-types:ashmem')
+    implementation project(':memory-types:nativememory')
+    implementation project(':memory-types:simple')
 }
 
-apply from: rootProject.file('release.gradle')
-
 android {
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
 
     defaultConfig {
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
     }
 
     lintOptions {
@@ -28,14 +37,4 @@ android {
     }
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-
-task testJar(type: Jar) {
-    from android.sourceSets.test.java.srcDirs
-    classifier = 'sources'
-}
-
-artifacts.add('archives', sourcesJar)
+apply plugin: "com.vanniktech.maven.publish"

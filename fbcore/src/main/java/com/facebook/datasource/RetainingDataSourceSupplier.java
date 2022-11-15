@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.datasource;
 
 import com.facebook.common.executors.CallerThreadExecutor;
@@ -96,11 +97,11 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
 
     private void onDataSourceNewResult(DataSource<T> dataSource) {
       if (dataSource == mDataSource) {
-        setResult(null, false);
+        setResult(null, false, dataSource.getExtras());
       }
     }
 
-    private void onDataSourceFailed(DataSource<T> dataSource) {
+    private void onDataSourceFailed() {
       // do not propagate failure
     }
 
@@ -122,13 +123,13 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
         if (dataSource.hasResult()) {
           RetainingDataSource.this.onDataSourceNewResult(dataSource);
         } else if (dataSource.isFinished()) {
-          RetainingDataSource.this.onDataSourceFailed(dataSource);
+          RetainingDataSource.this.onDataSourceFailed();
         }
       }
 
       @Override
       public void onFailure(DataSource<T> dataSource) {
-        RetainingDataSource.this.onDataSourceFailed(dataSource);
+        RetainingDataSource.this.onDataSourceFailed();
       }
 
       @Override

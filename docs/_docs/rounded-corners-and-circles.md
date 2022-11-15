@@ -44,7 +44,6 @@ The `SimpleDraweeView` class will forward several attributes over to `RoundingPa
 When constructing a hierarchy, you can pass an instance of [RoundingParams](../javadoc/reference/com/facebook/drawee/generic/RoundingParams.html) to your `GenericDraweeHierarchyBuilder:`
 
 ```java
-int overlayColor = getResources().getColor(R.color.green);
 RoundingParams roundingParams = RoundingParams.fromCornersRadius(7f);
 mSimpleDraweeView.setHierarchy(new GenericDraweeHierarchyBuilder(getResources())
         .setRoundingParams(roundingParams)
@@ -79,6 +78,6 @@ As explained above, there is no really good solution for rounding corners on And
 
 ### Full Sample
 
-For a full sample see the `DraweeRoundedCornersFragment` in the showcase app: [DraweeRoundedCornersFragment.java](https://github.com/facebook/fresco/blob/master/samples/showcase/src/main/java/com/facebook/fresco/samples/showcase/drawee/DraweeRoundedCornersFragment.java)
+For a full sample see the `DraweeRoundedCornersFragment` in the showcase app: [DraweeRoundedCornersFragment.java](https://github.com/facebook/fresco/blob/main/samples/showcase/src/main/java/com/facebook/fresco/samples/showcase/drawee/DraweeRoundedCornersFragment.java)
 
 ![Showcase app with a scale type example](/static/images/docs/01-rounded-corners-and-circles-sample.png)

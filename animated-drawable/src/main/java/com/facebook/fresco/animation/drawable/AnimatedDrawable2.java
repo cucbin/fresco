@@ -1,9 +1,10 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.animation.drawable;
 
 import android.graphics.Canvas;
@@ -17,20 +18,18 @@ import com.facebook.common.logging.FLog;
 import com.facebook.drawable.base.DrawableWithCaches;
 import com.facebook.drawee.drawable.DrawableProperties;
 import com.facebook.fresco.animation.backend.AnimationBackend;
-import com.facebook.fresco.animation.backend.AnimationInformation;
 import com.facebook.fresco.animation.frame.DropFramesFrameScheduler;
 import com.facebook.fresco.animation.frame.FrameScheduler;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
 /**
- * Experimental new animated drawable that uses a supplied
- * {@link AnimationBackend} for drawing frames.
+ * Experimental new animated drawable that uses a supplied [AnimationBackend] for drawing frames.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableWithCaches {
 
-  /**
-   * {@link #draw(Canvas)} listener that is notified for each draw call. Can be used for debugging.
-   */
+  /** [draw(Canvas)] listener that is notified for each draw call. Can be used for debugging. */
   public interface DrawListener {
 
     void onDraw(
@@ -55,17 +54,20 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   private static final int DEFAULT_FRAME_SCHEDULING_DELAY_MS = 8;
   private static final int DEFAULT_FRAME_SCHEDULING_OFFSET_MS = 0;
 
-  @Nullable
-  private AnimationBackend mAnimationBackend;
-  @Nullable
-  private FrameScheduler mFrameScheduler;
+  @Nullable private AnimationBackend mAnimationBackend;
+  @Nullable private FrameScheduler mFrameScheduler;
 
   // Animation parameters
   private volatile boolean mIsRunning;
   private long mStartTimeMs;
+
   private long mLastFrameAnimationTimeMs;
   private long mExpectedRenderTimeMs;
   private int mLastDrawnFrameNumber;
+
+  private long mPausedStartTimeMsDifference;
+  private long mPausedLastFrameAnimationTimeMsDifference;
+  private int mPausedLastDrawnFrameNumber;
 
   private long mFrameSchedulingDelayMs = DEFAULT_FRAME_SCHEDULING_DELAY_MS;
   private long mFrameSchedulingOffsetMs = DEFAULT_FRAME_SCHEDULING_OFFSET_MS;
@@ -75,35 +77,33 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
 
   // Listeners
   private volatile AnimationListener mAnimationListener = NO_OP_LISTENER;
-  @Nullable
-  private volatile DrawListener mDrawListener = null;
+  @Nullable private volatile DrawListener mDrawListener = null;
 
   // Holder for drawable properties like alpha to be able to re-apply if the backend changes.
   // The instance is created lazily only if needed.
-  @Nullable
-  private DrawableProperties mDrawableProperties;
+  @Nullable private DrawableProperties mDrawableProperties;
 
   /**
-   * Runnable that invalidates the drawable that will be scheduled according to the next
-   * target frame.
+   * Runnable that invalidates the drawable that will be scheduled according to the next target
+   * frame.
    */
-  private final Runnable mInvalidateRunnable = new Runnable() {
-    @Override
-    public void run() {
-      // Remove all potential other scheduled runnables
-      // (e.g. if the view has been invalidated a lot)
-      unscheduleSelf(mInvalidateRunnable);
-      // Draw the next frame
-      invalidateSelf();
-    }
-  };
+  private final Runnable mInvalidateRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          // Remove all potential other scheduled runnables
+          // (e.g. if the view has been invalidated a lot)
+          unscheduleSelf(mInvalidateRunnable);
+          // Draw the next frame
+          invalidateSelf();
+        }
+      };
 
   public AnimatedDrawable2() {
     this(null);
   }
 
-  public AnimatedDrawable2(
-      @Nullable AnimationBackend animationBackend) {
+  public AnimatedDrawable2(@Nullable AnimationBackend animationBackend) {
     mAnimationBackend = animationBackend;
     mFrameScheduler = createSchedulerForBackendAndDelayMethod(mAnimationBackend);
   }
@@ -124,31 +124,34 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     return mAnimationBackend.getIntrinsicHeight();
   }
 
-  /**
-   * Start the animation.
-   */
+  /** Start the animation. */
   @Override
   public void start() {
     if (mIsRunning || mAnimationBackend == null || mAnimationBackend.getFrameCount() <= 1) {
       return;
     }
     mIsRunning = true;
-    mStartTimeMs = now();
+
+    final long now = now();
+    mStartTimeMs = now - mPausedStartTimeMsDifference;
     mExpectedRenderTimeMs = mStartTimeMs;
-    mLastFrameAnimationTimeMs = -1;
-    mLastDrawnFrameNumber = -1;
+    mLastFrameAnimationTimeMs = now - mPausedLastFrameAnimationTimeMsDifference;
+    mLastDrawnFrameNumber = mPausedLastDrawnFrameNumber;
     invalidateSelf();
     mAnimationListener.onAnimationStart(this);
   }
 
-  /**
-   * Stop the animation at the current frame. It can be resumed by calling {@link #start()} again.
-   */
+  /** Stop the animation at the current frame. It can be resumed by calling [start()] again. */
   @Override
   public void stop() {
     if (!mIsRunning) {
       return;
     }
+    final long now = now();
+    mPausedStartTimeMsDifference = now - mStartTimeMs;
+    mPausedLastFrameAnimationTimeMsDifference = now - mLastFrameAnimationTimeMs;
+    mPausedLastDrawnFrameNumber = mLastDrawnFrameNumber;
+
     mIsRunning = false;
     mStartTimeMs = 0;
     mExpectedRenderTimeMs = mStartTimeMs;
@@ -181,17 +184,20 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     if (mAnimationBackend == null || mFrameScheduler == null) {
       return;
     }
+
     long actualRenderTimeStartMs = now();
-    long animationTimeMs = mIsRunning
-        ? actualRenderTimeStartMs - mStartTimeMs + mFrameSchedulingOffsetMs
-        : Math.max(mLastFrameAnimationTimeMs, 0);
+    long animationTimeMs =
+        mIsRunning
+            ? actualRenderTimeStartMs - mStartTimeMs + mFrameSchedulingOffsetMs
+            : Math.max(mLastFrameAnimationTimeMs, 0);
 
     // What frame should be drawn?
-    int frameNumberToDraw = mFrameScheduler.getFrameNumberToRender(
-        animationTimeMs,
-        mLastFrameAnimationTimeMs);
+
+    int frameNumberToDraw =
+        mFrameScheduler.getFrameNumberToRender(animationTimeMs, mLastFrameAnimationTimeMs);
 
     // Check if the animation is finished and draw last frame if so
+
     if (frameNumberToDraw == FrameScheduler.FRAME_NUMBER_DONE) {
       frameNumberToDraw = mAnimationBackend.getFrameCount() - 1;
       mAnimationListener.onAnimationStop(this);
@@ -210,8 +216,8 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
       mAnimationListener.onAnimationFrame(this, frameNumberToDraw);
       mLastDrawnFrameNumber = frameNumberToDraw;
     }
-
     // Log potential dropped frames
+
     if (!frameDrawn) {
       onFrameDropped();
     }
@@ -227,6 +233,9 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
         scheduledRenderTimeForNextFrameMs =
             targetRenderTimeForNextFrameMs + mFrameSchedulingDelayMs;
         scheduleNextFrame(scheduledRenderTimeForNextFrameMs);
+      } else {
+        mAnimationListener.onAnimationStop(this);
+        mIsRunning = false;
       }
     }
 
@@ -261,7 +270,7 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   @Override
-  public void setColorFilter(ColorFilter colorFilter) {
+  public void setColorFilter(@Nullable ColorFilter colorFilter) {
     if (mDrawableProperties == null) {
       mDrawableProperties = new DrawableProperties();
     }
@@ -277,14 +286,13 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
-   * Update the animation backend to be used for the animation.
-   * This will also stop the animation.
+   * Update the animation backend to be used for the animation. This will also stop the animation.
    * In order to remove the current animation backend, call this method with null.
    *
    * @param animationBackend the animation backend to be used or null
    */
   public void setAnimationBackend(@Nullable AnimationBackend animationBackend) {
-    mAnimationBackend = animationBackend;
+    this.mAnimationBackend = animationBackend;
     if (mAnimationBackend != null) {
       mFrameScheduler = new DropFramesFrameScheduler(mAnimationBackend);
       mAnimationBackend.setBounds(getBounds());
@@ -315,8 +323,8 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
-   * Jump immediately to the given frame number. The animation will not be paused if
-   * it is running. If the animation is not running, the animation will not be started.
+   * Jump immediately to the given frame number. The animation will not be paused if it is running.
+   * If the animation is not running, the animation will not be started.
    *
    * @param targetFrameNumber the frame number to jump to
    */
@@ -351,8 +359,7 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
-   * Get the number of frames for the animation.
-   * If no animation backend is set, 0 will be returned.
+   * Get the number of frames for the animation. If no animation backend is set, 0 will be returned.
    *
    * @return the number of frames of the animation
    */
@@ -361,40 +368,37 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
-   * Get the loop count of the animation.
-   * The returned value is either {@link AnimationInformation#LOOP_COUNT_INFINITE} if the animation
-   * is repeated infinitely or a positive integer that corresponds to the number of loops.
-   * If no animation backend is set, {@link AnimationInformation#LOOP_COUNT_INFINITE}
-   * will be returned.
+   * Get the loop count of the animation. The returned value is either
+   * [AnimationInformation#LOOP_COUNT_INFINITE] if the animation is repeated infinitely or a
+   * positive integer that corresponds to the number of loops. If no animation backend is set,
+   * [AnimationInformation#LOOP_COUNT_INFINITE] will be returned.
    *
-   * @return the loop count of the animation or {@link AnimationInformation#LOOP_COUNT_INFINITE}
+   * @return the loop count of the animation or [AnimationInformation#LOOP_COUNT_INFINITE]
    */
   public int getLoopCount() {
-    return mAnimationBackend == null
-        ? 0
-        : mAnimationBackend.getLoopCount();
+    return mAnimationBackend == null ? 0 : mAnimationBackend.getLoopCount();
   }
 
   /**
-   * Frame scheduling delay to shift the target render time for a frame within the frame's
-   * visible window. If the value is set to 0, the frame will be scheduled right at the beginning
-   * of the frame's visible window.
+   * Frame scheduling delay to shift the target render time for a frame within the frame's visible
+   * window. If the value is set to 0, the frame will be scheduled right at the beginning of the
+   * frame's visible window.
    *
    * @param frameSchedulingDelayMs the delay to use in ms
    */
   public void setFrameSchedulingDelayMs(long frameSchedulingDelayMs) {
-    mFrameSchedulingDelayMs = frameSchedulingDelayMs;
+    this.mFrameSchedulingDelayMs = frameSchedulingDelayMs;
   }
 
   /**
-   * Frame scheduling offset to shift the animation time by the given offset.
-   * This is similar to {@link #mFrameSchedulingDelayMs} but instead of delaying the invalidation,
-   * this offsets the animation time by the given value.
+   * Frame scheduling offset to shift the animation time by the given offset. This is similar to
+   * [mFrameSchedulingDelayMs] but instead of delaying the invalidation, this offsets the animation
+   * time by the given value.
    *
    * @param frameSchedulingOffsetMs the offset to use in ms
    */
   public void setFrameSchedulingOffsetMs(long frameSchedulingOffsetMs) {
-    mFrameSchedulingOffsetMs = frameSchedulingOffsetMs;
+    this.mFrameSchedulingOffsetMs = frameSchedulingOffsetMs;
   }
 
   /**
@@ -403,18 +407,16 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
    * @param animationListener the listener to use
    */
   public void setAnimationListener(@Nullable AnimationListener animationListener) {
-    mAnimationListener = animationListener != null
-        ? animationListener
-        : NO_OP_LISTENER;
+    this.mAnimationListener = animationListener != null ? animationListener : NO_OP_LISTENER;
   }
 
   /**
-   * Set a draw listener that is notified for each {@link #draw(Canvas)} call.
+   * Set a draw listener that is notified for each [draw(Canvas)] call.
    *
    * @param drawListener the listener to use
    */
   public void setDrawListener(@Nullable DrawListener drawListener) {
-    mDrawListener = drawListener;
+    this.mDrawListener = drawListener;
   }
 
   /**
@@ -435,11 +437,9 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     }
   }
 
-  /**
-   * @return the current uptime in ms
-   */
+  /** @return the current uptime in ms */
   private long now() {
-    // This call has to return {@link SystemClock#uptimeMillis()} in order to preserve correct
+    // This call has to return [SystemClock#uptimeMillis()] in order to preserve correct
     // frame scheduling.
     return SystemClock.uptimeMillis();
   }
@@ -454,12 +454,12 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
-   * Set the animation to the given level. The level represents the animation time in ms.
-   * If the animation time is greater than the last frame time for the last loop, the last
-   * frame will be displayed.
+   * Set the animation to the given level. The level represents the animation time in ms. If the
+   * animation time is greater than the last frame time for the last loop, the last frame will be
+   * displayed.
    *
-   * If the animation is running (e.g. if {@link #start()} has been called, the level change
-   * will be ignored. In this case, {@link #stop()} the animation first.
+   * <p>If the animation is running (e.g. if [start()] has been called, the level change will be
+   * ignored. In this case, [stop()] the animation first.
    *
    * @param level the animation time in ms
    * @return true if the level change could be performed

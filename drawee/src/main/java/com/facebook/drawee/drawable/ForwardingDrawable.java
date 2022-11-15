@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,17 +16,19 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
 /**
  * A forwarding drawable class - the goal is to forward (delegate) drawable functionality to an
  * inner drawable instance. ForwardingDrawable intercepts the public (and protected) methods of
  * {@link Drawable}, maintains local state if needed.
- * <p>
- * Design note: It would have been very helpful to re-use Android library classes
- * like DrawableContainer, LevelListDrawable etc. DrawableContainer is not directly subclassable,
- * and the others don't allow changing the member drawables.
+ *
+ * <p>Design note: It would have been very helpful to re-use Android library classes like
+ * DrawableContainer, LevelListDrawable etc. DrawableContainer is not directly subclassable, and the
+ * others don't allow changing the member drawables.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ForwardingDrawable extends Drawable
     implements Drawable.Callback, TransformCallback, TransformAwareDrawable, DrawableParent {
 
@@ -35,7 +37,7 @@ public class ForwardingDrawable extends Drawable
 
   private final DrawableProperties mDrawableProperties = new DrawableProperties();
 
-  protected TransformCallback mTransformCallback;
+  @Nullable protected TransformCallback mTransformCallback;
 
   /**
    * Matrix used to store temporary transform. Drawables should be accessed on UI thread only, and
@@ -103,7 +105,7 @@ public class ForwardingDrawable extends Drawable
   }
 
   @Override
-  public void setColorFilter(ColorFilter colorFilter) {
+  public void setColorFilter(@Nullable ColorFilter colorFilter) {
     mDrawableProperties.setColorFilter(colorFilter);
     if (mCurrentDelegate != null) {
       mCurrentDelegate.setColorFilter(colorFilter);
@@ -230,6 +232,7 @@ public class ForwardingDrawable extends Drawable
   // DrawableParent methods
 
   @Override
+  @Nullable
   public Drawable setDrawable(@Nullable Drawable newDrawable) {
     return setCurrent(newDrawable);
   }
@@ -288,8 +291,9 @@ public class ForwardingDrawable extends Drawable
   }
 
   /**
-   * Gets the transformed bounds of this drawable.
-   * Note: bounds are not cropped (otherwise they would likely be the same as drawable's bounds).
+   * Gets the transformed bounds of this drawable. Note: bounds are not cropped (otherwise they
+   * would likely be the same as drawable's bounds).
+   *
    * @param outBounds rect to fill with bounds
    */
   public void getTransformedBounds(RectF outBounds) {

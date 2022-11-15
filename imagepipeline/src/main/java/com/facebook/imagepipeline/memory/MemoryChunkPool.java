@@ -1,17 +1,20 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.imagepipeline.memory;
 
 import android.util.SparseIntArray;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.memory.MemoryTrimmableRegistry;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.concurrent.ThreadSafe;
 
 /** Manages a pool of memory chunks ({@link MemoryChunk}) */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 public abstract class MemoryChunkPool extends BasePool<MemoryChunk> {
   private final int[] mBucketSizes;
@@ -28,8 +31,8 @@ public abstract class MemoryChunkPool extends BasePool<MemoryChunk> {
       PoolParams poolParams,
       PoolStatsTracker memoryChunkPoolStatsTracker) {
     super(memoryTrimmableRegistry, poolParams, memoryChunkPoolStatsTracker);
-    SparseIntArray bucketSizes = poolParams.bucketSizes;
-    mBucketSizes = new int[bucketSizes.size()];
+    SparseIntArray bucketSizes = Preconditions.checkNotNull(poolParams.bucketSizes);
+    this.mBucketSizes = new int[bucketSizes.size()];
     for (int i = 0; i < mBucketSizes.length; ++i) {
       mBucketSizes[i] = bucketSizes.keyAt(i);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,17 +10,21 @@ package com.facebook.imagepipeline.decoder;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Collections;
 import java.util.List;
 
 /**
  * Simple {@link ProgressiveJpegConfig} with predefined scans to decode and good-enough scan number.
  *
- * <p/> If no specific scans to decode are provided, every scan is allowed to be decoded.
+ * <p>If no specific scans to decode are provided, every scan is allowed to be decoded.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class SimpleProgressiveJpegConfig implements ProgressiveJpegConfig {
   public interface DynamicValueConfig {
+
     List<Integer> getScansToDecode();
+
     int getGoodEnoughScanNumber();
   }
 
@@ -37,13 +41,16 @@ public class SimpleProgressiveJpegConfig implements ProgressiveJpegConfig {
   private final DynamicValueConfig mDynamicValueConfig;
 
   public SimpleProgressiveJpegConfig() {
-    this (new DefaultDynamicValueConfig());
+    this(new DefaultDynamicValueConfig());
   }
-
-
 
   public SimpleProgressiveJpegConfig(DynamicValueConfig dynamicValueConfig) {
     mDynamicValueConfig = Preconditions.checkNotNull(dynamicValueConfig);
+  }
+
+  @Override
+  public boolean decodeProgressively() {
+    return true;
   }
 
   @Override

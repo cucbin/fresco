@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,12 +11,15 @@ import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.memory.MemoryTrimmableRegistry;
 import com.facebook.common.memory.PooledByteBuffer;
+import com.facebook.infer.annotation.Nullsafe;
 
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class EncodedCountingMemoryCacheFactory {
 
   public static CountingMemoryCache<CacheKey, PooledByteBuffer> get(
       Supplier<MemoryCacheParams> encodedMemoryCacheParamsSupplier,
-      MemoryTrimmableRegistry memoryTrimmableRegistry) {
+      MemoryTrimmableRegistry memoryTrimmableRegistry,
+      MemoryCache.CacheTrimStrategy cacheTrimStrategy) {
 
     ValueDescriptor<PooledByteBuffer> valueDescriptor =
         new ValueDescriptor<PooledByteBuffer>() {
@@ -26,10 +29,14 @@ public class EncodedCountingMemoryCacheFactory {
           }
         };
 
-    CountingMemoryCache.CacheTrimStrategy trimStrategy = new NativeMemoryCacheTrimStrategy();
-
     CountingMemoryCache<CacheKey, PooledByteBuffer> countingCache =
-        new CountingMemoryCache<>(valueDescriptor, trimStrategy, encodedMemoryCacheParamsSupplier);
+        new LruCountingMemoryCache<>(
+            valueDescriptor,
+            cacheTrimStrategy,
+            encodedMemoryCacheParamsSupplier,
+            null,
+            false,
+            false);
 
     memoryTrimmableRegistry.registerMemoryTrimmable(countingCache);
 

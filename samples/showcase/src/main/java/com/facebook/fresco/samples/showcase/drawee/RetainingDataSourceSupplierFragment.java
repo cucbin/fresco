@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.drawee;
 
 import android.graphics.drawable.Animatable;
@@ -36,7 +32,7 @@ public class RetainingDataSourceSupplierFragment extends BaseShowcaseFragment {
   private List<Uri> mSampleUris;
   private int mUriIndex = 0;
 
-  private ControllerListener controllerListener =
+  private final ControllerListener<ImageInfo> controllerListener =
       new BaseControllerListener<ImageInfo>() {
         @Override
         public void onFinalImageSet(
@@ -73,18 +69,7 @@ public class RetainingDataSourceSupplierFragment extends BaseShowcaseFragment {
             .setControllerListener(controllerListener)
             .build());
     replaceImage(retainingSupplier);
-    simpleDraweeView.setOnClickListener(
-        new View.OnClickListener() {
-          @Override
-          public void onClick(View view) {
-            replaceImage(retainingSupplier);
-          }
-        });
-  }
-
-  @Override
-  public int getTitleId() {
-    return R.string.drawee_retaining_supplier_title;
+    simpleDraweeView.setOnClickListener(v -> replaceImage(retainingSupplier));
   }
 
   private void replaceImage(

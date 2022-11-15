@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,21 +7,25 @@
 
 package com.facebook.animated.gif;
 
+import android.graphics.Bitmap;
 import com.facebook.common.internal.DoNotStrip;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo.BlendOperation;
 import com.facebook.imagepipeline.animated.base.AnimatedImage;
 import com.facebook.imagepipeline.animated.factory.AnimatedImageDecoder;
-import com.facebook.soloader.SoLoader;
+import com.facebook.imagepipeline.common.ImageDecodeOptions;
+import com.facebook.infer.annotation.Nullsafe;
+import com.facebook.soloader.nativeloader.NativeLoader;
 import java.nio.ByteBuffer;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A representation of a GIF image. An instance of this class will hold a copy of the encoded
- * data in memory along with the parsed header data. Frames are decoded on demand via
- * {@link GifFrame}.
+ * A representation of a GIF image. An instance of this class will hold a copy of the encoded data
+ * in memory along with the parsed header data. Frames are decoded on demand via {@link GifFrame}.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 @DoNotStrip
 public class GifImage implements AnimatedImage, AnimatedImageDecoder {
@@ -29,35 +33,36 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
   private static final int LOOP_COUNT_FOREVER = 0;
   private static final int LOOP_COUNT_MISSING = -1;
 
-  private volatile static boolean sInitialized;
+  private static volatile boolean sInitialized;
 
   // Accessed by native methods
   @SuppressWarnings("unused")
   @DoNotStrip
   private long mNativeContext;
 
+  @Nullable private Bitmap.Config mDecodeBitmapConfig = null;
+
   private static synchronized void ensure() {
     if (!sInitialized) {
       sInitialized = true;
-      SoLoader.loadLibrary("gifimage");
+      NativeLoader.loadLibrary("gifimage");
     }
   }
 
   /**
-   * Creates a {@link GifImage} from the specified encoded data. This will throw if it fails
-   * to create. This is meant to be called on a worker thread.
+   * Creates a {@link GifImage} from the specified encoded data. This will throw if it fails to
+   * create. This is meant to be called on a worker thread.
    *
    * @param source the data to the image (a copy will be made)
    */
-  public static GifImage create(byte[] source) {
-    ensure();
+  public static GifImage createFromByteArray(byte[] source) {
     Preconditions.checkNotNull(source);
 
     ByteBuffer byteBuffer = ByteBuffer.allocateDirect(source.length);
     byteBuffer.put(source);
     byteBuffer.rewind();
 
-    return nativeCreateFromDirectByteBuffer(byteBuffer);
+    return createFromByteBuffer(byteBuffer, ImageDecodeOptions.defaults());
   }
 
   /**
@@ -66,32 +71,64 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
    *
    * @param byteBuffer the ByteBuffer containing the image (a copy will be made)
    */
-  public static GifImage create(ByteBuffer byteBuffer) {
+  public static GifImage createFromByteBuffer(ByteBuffer byteBuffer) {
+    return createFromByteBuffer(byteBuffer, ImageDecodeOptions.defaults());
+  }
+
+  /**
+   * Creates a {@link GifImage} from a ByteBuffer containing the image. This will throw if it fails
+   * to create.
+   *
+   * @param byteBuffer the ByteBuffer containing the image (a copy will be made)
+   */
+  public static GifImage createFromByteBuffer(ByteBuffer byteBuffer, ImageDecodeOptions options) {
     ensure();
     byteBuffer.rewind();
 
-    return nativeCreateFromDirectByteBuffer(byteBuffer);
+    GifImage image =
+        nativeCreateFromDirectByteBuffer(
+            byteBuffer, options.maxDimensionPx, options.forceStaticImage);
+    image.mDecodeBitmapConfig = options.animatedBitmapConfig;
+    return image;
   }
 
-  public static GifImage create(long nativePtr, int sizeInBytes) {
+  public static GifImage createFromNativeMemory(
+      long nativePtr, int sizeInBytes, ImageDecodeOptions options) {
     ensure();
     Preconditions.checkArgument(nativePtr != 0);
-    return nativeCreateFromNativeMemory(nativePtr, sizeInBytes);
+    GifImage image =
+        nativeCreateFromNativeMemory(
+            nativePtr, sizeInBytes, options.maxDimensionPx, options.forceStaticImage);
+    image.mDecodeBitmapConfig = options.animatedBitmapConfig;
+    return image;
+  }
+
+  /**
+   * Creates a {@link GifImage} from a file descriptor containing the image. This will throw if it
+   * fails to create.
+   *
+   * @param fileDescriptor the file descriptor containing the image (a copy will be made)
+   */
+  public static GifImage createFromFileDescriptor(int fileDescriptor, ImageDecodeOptions options) {
+    ensure();
+
+    return nativeCreateFromFileDescriptor(
+        fileDescriptor, options.maxDimensionPx, options.forceStaticImage);
   }
 
   @Override
-  public AnimatedImage decode(long nativePtr, int sizeInBytes) {
-    return GifImage.create(nativePtr, sizeInBytes);
+  public AnimatedImage decodeFromNativeMemory(
+      long nativePtr, int sizeInBytes, ImageDecodeOptions options) {
+    return GifImage.createFromNativeMemory(nativePtr, sizeInBytes, options);
   }
 
   @Override
-  public AnimatedImage decode(ByteBuffer byteBuffer) {
-    return GifImage.create(byteBuffer);
+  public AnimatedImage decodeFromByteBuffer(ByteBuffer byteBuffer, ImageDecodeOptions options) {
+    return GifImage.createFromByteBuffer(byteBuffer, options);
   }
 
   @DoNotStrip
-  public GifImage() {
-  }
+  public GifImage() {}
 
   /**
    * Constructs the image with the native pointer. This is called by native code.
@@ -171,6 +208,10 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
     return nativeGetSizeInBytes();
   }
 
+  public boolean isAnimated() {
+    return nativeIsAnimated();
+  }
+
   @Override
   public AnimatedDrawableFrameInfo getFrameInfo(int frameNumber) {
     GifFrame frame = getFrame(frameNumber);
@@ -188,6 +229,12 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
     }
   }
 
+  @Override
+  @Nullable
+  public Bitmap.Config getAnimatedBitmapConfig() {
+    return mDecodeBitmapConfig;
+  }
+
   private static AnimatedDrawableFrameInfo.DisposalMethod fromGifDisposalMethod(int disposalMode) {
     if (disposalMode == 0 /* DISPOSAL_UNSPECIFIED */) {
       return AnimatedDrawableFrameInfo.DisposalMethod.DISPOSE_DO_NOT;
@@ -203,10 +250,16 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
   }
 
   @DoNotStrip
-  private static native GifImage nativeCreateFromDirectByteBuffer(ByteBuffer buffer);
+  private static native GifImage nativeCreateFromDirectByteBuffer(
+      ByteBuffer buffer, int maxDimension, boolean forceStatic);
 
   @DoNotStrip
-  private static native GifImage nativeCreateFromNativeMemory(long nativePtr, int sizeInBytes);
+  private static native GifImage nativeCreateFromNativeMemory(
+      long nativePtr, int sizeInBytes, int maxDimension, boolean forceStatic);
+
+  @DoNotStrip
+  private static native GifImage nativeCreateFromFileDescriptor(
+      int fileDescriptor, int maxDimension, boolean forceStatic);
 
   @DoNotStrip
   private native int nativeGetWidth();
@@ -231,6 +284,9 @@ public class GifImage implements AnimatedImage, AnimatedImageDecoder {
 
   @DoNotStrip
   private native int nativeGetSizeInBytes();
+
+  @DoNotStrip
+  private native boolean nativeIsAnimated();
 
   @DoNotStrip
   private native void nativeDispose();

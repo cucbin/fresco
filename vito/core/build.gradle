@@ -1,39 +1,49 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.TestDeps
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 dependencies {
-    compileOnly "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
-    compileOnly "javax.annotation:javax.annotation-api:${ANNOTATION_API_VERSION}"
-    compileOnly "com.facebook.infer.annotation:infer-annotation:${INFER_ANNOTATION_VERSION}"
+    compileOnly Deps.jsr305
+    compileOnly Deps.javaxAnnotation
+    compileOnly Deps.inferAnnotation
 
-    implementation "androidx.core:core:${versions.androidx.core}"
+    implementation Deps.AndroidX.core
 
-    implementation project(':animated-drawable')
-    implementation project(':drawee')
     implementation project(':drawee-backends:drawee-pipeline')
     implementation project(':fbcore')
-    implementation project(':imagepipeline')
+    implementation project(':imagepipeline-base')
+    implementation project(':middleware')
+    implementation project(':ui-common')
+    implementation project(':urimod')
     implementation project(':vito:options')
+    implementation project(':vito:source')
 
-    testImplementation "junit:junit:${JUNIT_VERSION}"
-    testImplementation "org.assertj:assertj-core:${versions.assertjCore}"
-    testImplementation "org.mockito:mockito-core:${MOCKITO_CORE_VERSION}"
-    testImplementation("org.robolectric:robolectric:${ROBOLECTRIC_VERSION}") {
+    testImplementation TestDeps.junit
+    testImplementation TestDeps.assertjCore
+    testImplementation TestDeps.mockitoInline
+    testImplementation(TestDeps.robolectric) {
         exclude group: 'commons-logging', module: 'commons-logging'
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
+    testImplementation project(':imagepipeline-base-test')
 }
 
 android {
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
 
     defaultConfig {
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
     }
 
     lintOptions {
@@ -41,14 +51,4 @@ android {
     }
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-
-task testJar(type: Jar) {
-    from android.sourceSets.test.java.srcDirs
-    classifier = 'sources'
-}
-
-artifacts.add('archives', sourcesJar)
+apply plugin: "com.vanniktech.maven.publish"

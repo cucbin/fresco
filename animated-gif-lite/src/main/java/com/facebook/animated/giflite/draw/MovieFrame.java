@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,11 +10,13 @@ package com.facebook.animated.giflite.draw;
 import android.graphics.Bitmap;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo;
 import com.facebook.imagepipeline.animated.base.AnimatedImageFrame;
+import com.facebook.infer.annotation.Nullsafe;
 
 /**
  * Simple wrapper for an animated image frame back by {@link MovieDrawer}. All {@link MovieFrame}
  * for the same {@link MovieAnimatedImage} will be backed by the same {@link MovieDrawer}.
  */
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class MovieFrame implements AnimatedImageFrame {
 
   private final MovieDrawer mMovieDrawer;

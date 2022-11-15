@@ -1,42 +1,54 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.TestDeps
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-kapt'
 
 dependencies {
-    compileOnly "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
-    compileOnly "javax.annotation:javax.annotation-api:${ANNOTATION_API_VERSION}"
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.jsr305
+    compileOnly Deps.javaxAnnotation
 
-    implementation "androidx.core:core:${versions.androidx.core}"
-    implementation "com.facebook.litho:litho-annotations:${versions.litho}"
-    implementation "com.facebook.litho:litho-core:${versions.litho}"
-    implementation "com.facebook.litho:litho-widget:${versions.litho}"
+    implementation Deps.AndroidX.core
+    implementation Deps.Litho.lithoAnnotations
+    implementation Deps.Litho.core
+    implementation Deps.Litho.widget
 
-    annotationProcessor "com.facebook.litho:litho-processor:${versions.litho}"
+    kapt Deps.Litho.processor
 
     implementation project(':drawee')
     implementation project(':fbcore')
+    implementation project(':ui-common')
     implementation project(':vito:core')
     implementation project(':vito:options')
     implementation project(':vito:provider')
+    implementation project(':vito:source')
 
-    testImplementation "junit:junit:${JUNIT_VERSION}"
-    testImplementation "org.assertj:assertj-core:${versions.assertjCore}"
-    testImplementation "org.mockito:mockito-core:${MOCKITO_CORE_VERSION}"
-    testImplementation("org.robolectric:robolectric:${ROBOLECTRIC_VERSION}") {
+    testImplementation TestDeps.junit
+    testImplementation TestDeps.assertjCore
+    testImplementation TestDeps.mockitoCore
+    testImplementation(TestDeps.robolectric) {
         exclude group: 'commons-logging', module: 'commons-logging'
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
+    implementation project(path: ':imagepipeline')
 }
 
 android {
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
 
     defaultConfig {
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
     }
 
     lintOptions {
@@ -44,14 +56,4 @@ android {
     }
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-
-task testJar(type: Jar) {
-    from android.sourceSets.test.java.srcDirs
-    classifier = 'sources'
-}
-
-artifacts.add('archives', sourcesJar)
+apply plugin: "com.vanniktech.maven.publish"

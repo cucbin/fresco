@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,6 @@
 package com.facebook.imagepipeline.decoder;
 
 import android.graphics.Bitmap;
-import android.os.Build;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imageformat.DefaultImageFormats;
 import com.facebook.imageformat.ImageFormat;
@@ -20,35 +19,39 @@ import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import com.facebook.imagepipeline.platform.PlatformDecoder;
-import com.facebook.imagepipeline.transformation.BitmapTransformation;
+import com.facebook.imagepipeline.transformation.CircularTransformation;
+import com.facebook.imagepipeline.transformation.TransformationUtils;
+import com.facebook.infer.annotation.Nullsafe;
+import java.io.InputStream;
 import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
  * Decodes images.
  *
- * <p> ImageDecoder implements image type recognition and passes decode requests to
- * specialized methods implemented by subclasses.
+ * <p>ImageDecoder implements image type recognition and passes decode requests to specialized
+ * methods implemented by subclasses.
  *
- * On dalvik, it produces 'pinned' purgeable bitmaps.
+ * <p>On dalvik, it produces 'pinned' purgeable bitmaps.
  *
- * <p> Pinned purgeables behave as specified in
- * {@link android.graphics.BitmapFactory.Options#inPurgeable} with one modification. The bitmap is
- * 'pinned' so is never purged.
+ * <p>Pinned purgeables behave as specified in {@link
+ * android.graphics.BitmapFactory.Options#inPurgeable} with one modification. The bitmap is 'pinned'
+ * so is never purged.
  *
- * <p> For API 21 and higher, this class produces standard Bitmaps, as purgeability is not supported
+ * <p>For API 21 and higher, this class produces standard Bitmaps, as purgeability is not supported
  * on the most recent versions of Android.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DefaultImageDecoder implements ImageDecoder {
 
-  private final ImageDecoder mAnimatedGifDecoder;
-  private final ImageDecoder mAnimatedWebPDecoder;
+  private final @Nullable ImageDecoder mAnimatedGifDecoder;
+  private final @Nullable ImageDecoder mAnimatedWebPDecoder;
   private final PlatformDecoder mPlatformDecoder;
 
   private final ImageDecoder mDefaultDecoder =
       new ImageDecoder() {
         @Override
-        public CloseableImage decode(
+        public @Nullable CloseableImage decode(
             EncodedImage encodedImage,
             int length,
             QualityInfo qualityInfo,
@@ -67,19 +70,18 @@ public class DefaultImageDecoder implements ImageDecoder {
         }
       };
 
-  @Nullable
-  private final Map<ImageFormat, ImageDecoder> mCustomDecoders;
+  @Nullable private final Map<ImageFormat, ImageDecoder> mCustomDecoders;
 
   public DefaultImageDecoder(
-      final ImageDecoder animatedGifDecoder,
-      final ImageDecoder animatedWebPDecoder,
+      @Nullable final ImageDecoder animatedGifDecoder,
+      @Nullable final ImageDecoder animatedWebPDecoder,
       final PlatformDecoder platformDecoder) {
     this(animatedGifDecoder, animatedWebPDecoder, platformDecoder, null);
   }
 
   public DefaultImageDecoder(
-      final ImageDecoder animatedGifDecoder,
-      final ImageDecoder animatedWebPDecoder,
+      @Nullable final ImageDecoder animatedGifDecoder,
+      @Nullable final ImageDecoder animatedWebPDecoder,
       final PlatformDecoder platformDecoder,
       @Nullable Map<ImageFormat, ImageDecoder> customDecoders) {
     mAnimatedGifDecoder = animatedGifDecoder;
@@ -95,10 +97,10 @@ public class DefaultImageDecoder implements ImageDecoder {
    * @param length if image type supports decoding incomplete image then determines where the image
    *     data should be cut for decoding.
    * @param qualityInfo quality information for the image
-   * @param options options that cange decode behavior
+   * @param options options that can change decode behavior
    */
   @Override
-  public CloseableImage decode(
+  public @Nullable CloseableImage decode(
       final EncodedImage encodedImage,
       final int length,
       final QualityInfo qualityInfo,
@@ -108,9 +110,11 @@ public class DefaultImageDecoder implements ImageDecoder {
     }
     ImageFormat imageFormat = encodedImage.getImageFormat();
     if (imageFormat == null || imageFormat == ImageFormat.UNKNOWN) {
-      imageFormat = ImageFormatChecker.getImageFormat_WrapIOException(
-          encodedImage.getInputStream());
-      encodedImage.setImageFormat(imageFormat);
+      InputStream inputStream = encodedImage.getInputStream();
+      if (inputStream != null) {
+        imageFormat = ImageFormatChecker.getImageFormat_WrapIOException(inputStream);
+        encodedImage.setImageFormat(imageFormat);
+      }
     }
     if (mCustomDecoders != null) {
       ImageDecoder decoder = mCustomDecoders.get(imageFormat);
@@ -127,7 +131,7 @@ public class DefaultImageDecoder implements ImageDecoder {
    * @param encodedImage input image (encoded bytes plus meta data)
    * @return a CloseableImage
    */
-  public CloseableImage decodeGif(
+  public @Nullable CloseableImage decodeGif(
       final EncodedImage encodedImage,
       final int length,
       final QualityInfo qualityInfo,
@@ -147,18 +151,27 @@ public class DefaultImageDecoder implements ImageDecoder {
    * @return a CloseableStaticBitmap
    */
   public CloseableStaticBitmap decodeStaticImage(
-      final EncodedImage encodedImage,
-      ImageDecodeOptions options) {
+      final EncodedImage encodedImage, ImageDecodeOptions options) {
     CloseableReference<Bitmap> bitmapReference =
         mPlatformDecoder.decodeFromEncodedImageWithColorSpace(
             encodedImage, options.bitmapConfig, null, options.colorSpace);
     try {
-      maybeApplyTransformation(options.bitmapTransformation, bitmapReference);
-      return new CloseableStaticBitmap(
-          bitmapReference,
-          ImmutableQualityInfo.FULL_QUALITY,
-          encodedImage.getRotationAngle(),
-          encodedImage.getExifOrientation());
+      boolean didApplyTransformation =
+          TransformationUtils.maybeApplyTransformation(
+              options.bitmapTransformation, bitmapReference);
+
+      CloseableStaticBitmap closeableStaticBitmap =
+          CloseableStaticBitmap.of(
+              bitmapReference,
+              ImmutableQualityInfo.FULL_QUALITY,
+              encodedImage.getRotationAngle(),
+              encodedImage.getExifOrientation());
+
+      closeableStaticBitmap.setImageExtra(
+          "is_rounded",
+          didApplyTransformation && options.bitmapTransformation instanceof CircularTransformation);
+
+      return closeableStaticBitmap;
     } finally {
       bitmapReference.close();
     }
@@ -181,12 +194,22 @@ public class DefaultImageDecoder implements ImageDecoder {
         mPlatformDecoder.decodeJPEGFromEncodedImageWithColorSpace(
             encodedImage, options.bitmapConfig, null, length, options.colorSpace);
     try {
-      maybeApplyTransformation(options.bitmapTransformation, bitmapReference);
-      return new CloseableStaticBitmap(
-          bitmapReference,
-          qualityInfo,
-          encodedImage.getRotationAngle(),
-          encodedImage.getExifOrientation());
+      boolean didApplyTransformation =
+          TransformationUtils.maybeApplyTransformation(
+              options.bitmapTransformation, bitmapReference);
+
+      CloseableStaticBitmap closeableStaticBitmap =
+          CloseableStaticBitmap.of(
+              bitmapReference,
+              qualityInfo,
+              encodedImage.getRotationAngle(),
+              encodedImage.getExifOrientation());
+
+      closeableStaticBitmap.setImageExtra(
+          "is_rounded",
+          didApplyTransformation && options.bitmapTransformation instanceof CircularTransformation);
+
+      return closeableStaticBitmap;
     } finally {
       bitmapReference.close();
     }
@@ -195,30 +218,20 @@ public class DefaultImageDecoder implements ImageDecoder {
   /**
    * Decode a webp animated image into a CloseableImage.
    *
-   * <p> The image is decoded into a 'pinned' purgeable bitmap.
+   * <p>The image is decoded into a 'pinned' purgeable bitmap.
    *
    * @param encodedImage input image (encoded bytes plus meta data)
    * @param options
    * @return a {@link CloseableImage}
    */
-  public CloseableImage decodeAnimatedWebp(
+  public @Nullable CloseableImage decodeAnimatedWebp(
       final EncodedImage encodedImage,
       final int length,
       final QualityInfo qualityInfo,
       final ImageDecodeOptions options) {
-    return mAnimatedWebPDecoder.decode(encodedImage, length, qualityInfo, options);
-  }
-
-  private void maybeApplyTransformation(
-      @Nullable BitmapTransformation transformation, CloseableReference<Bitmap> bitmapReference) {
-    if (transformation == null) {
-      return;
+    if (!options.forceStaticImage && mAnimatedWebPDecoder != null) {
+      return mAnimatedWebPDecoder.decode(encodedImage, length, qualityInfo, options);
     }
-    Bitmap bitmap = bitmapReference.get();
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR1
-        && transformation.modifiesTransparency()) {
-      bitmap.setHasAlpha(true);
-    }
-    transformation.transform(bitmap);
+    return decodeStaticImage(encodedImage, options);
   }
 }

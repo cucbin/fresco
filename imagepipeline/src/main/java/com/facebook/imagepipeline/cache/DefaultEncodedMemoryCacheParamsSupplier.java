@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,11 +9,11 @@ package com.facebook.imagepipeline.cache;
 
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.util.ByteConstants;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Supplies {@link MemoryCacheParams} for the encoded image memory cache
- */
+/** Supplies {@link MemoryCacheParams} for the encoded image memory cache */
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class DefaultEncodedMemoryCacheParamsSupplier implements Supplier<MemoryCacheParams> {
 
   // We want memory cache to be bound only by its memory consumption
@@ -23,7 +23,7 @@ public class DefaultEncodedMemoryCacheParamsSupplier implements Supplier<MemoryC
 
   @Override
   public MemoryCacheParams get() {
-    final int maxCacheSize = getMaxCacheSize();
+    final int maxCacheSize = this.getMaxCacheSize();
     final int maxCacheEntrySize = maxCacheSize / 8;
     return new MemoryCacheParams(
         maxCacheSize,

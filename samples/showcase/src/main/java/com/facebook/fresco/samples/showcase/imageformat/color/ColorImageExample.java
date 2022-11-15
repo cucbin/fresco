@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imageformat.color;
 
 import android.graphics.drawable.ColorDrawable;
@@ -23,30 +19,30 @@ import com.facebook.imagepipeline.decoder.ImageDecoder;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
  * Example for a simple decoder that can decode color images that have the following format:
  *
- *     <color>#FF5722</color>
+ * <p><color>#FF5722</color>
  */
 public class ColorImageExample {
 
-  /**
-   * XML color tag that our colors must start with.
-   */
+  /** XML color tag that our colors must start with. */
   public static final String COLOR_TAG = "<color>";
 
-  /**
-   * Custom {@link ImageFormat} for color images.
-   */
+  /** Custom {@link ImageFormat} for color images. */
   public static final ImageFormat IMAGE_FORMAT_COLOR =
       new ImageFormat("IMAGE_FORMAT_COLOR", "color");
 
   /**
    * Create a new image format checker for {@link #IMAGE_FORMAT_COLOR}.
+   *
    * @return the image format checker
    */
   public static ImageFormat.FormatChecker createFormatChecker() {
@@ -55,6 +51,7 @@ public class ColorImageExample {
 
   /**
    * Create a new decoder that can decode {@link #IMAGE_FORMAT_COLOR} images.
+   *
    * @return the decoder
    */
   public static ImageDecoder createDecoder() {
@@ -66,8 +63,8 @@ public class ColorImageExample {
   }
 
   /**
-   * Custom color format checker that verifies that the header of the file
-   * corresponds to our {@link #COLOR_TAG}.
+   * Custom color format checker that verifies that the header of the file corresponds to our {@link
+   * #COLOR_TAG}.
    */
   public static class ColorFormatChecker implements ImageFormat.FormatChecker {
 
@@ -91,13 +88,10 @@ public class ColorImageExample {
     }
   }
 
-  /**
-   * Custom closeable color image that holds a single color int value.
-   */
-  public static class CloseableColorImage extends CloseableImage {
+  /** Custom closeable color image that holds a single color int value. */
+  public static class CloseableColorImage implements CloseableImage {
 
-    @ColorInt
-    private final int mColor;
+    @ColorInt private final int mColor;
 
     private boolean mClosed = false;
 
@@ -126,6 +120,17 @@ public class ColorImageExample {
     }
 
     @Override
+    public void setImageExtras(@Nullable Map<String, Object> extras) {}
+
+    @Override
+    public void setImageExtra(String extra, Object value) {}
+
+    @Override
+    public boolean isStateful() {
+      return false;
+    }
+
+    @Override
     public int getWidth() {
       return 0;
     }
@@ -134,11 +139,19 @@ public class ColorImageExample {
     public int getHeight() {
       return 0;
     }
+
+    @Override
+    public QualityInfo getQualityInfo() {
+      return ImmutableQualityInfo.FULL_QUALITY;
+    }
+
+    @Override
+    public Map<String, Object> getExtras() {
+      return Collections.emptyMap();
+    }
   }
 
-  /**
-   * Decodes a color XML tag: <color>#rrggbb</color>
-   */
+  /** Decodes a color XML tag: <color>#rrggbb</color> */
   public static class ColorDecoder implements ImageDecoder {
 
     @Override
@@ -175,8 +188,8 @@ public class ColorImageExample {
   }
 
   /**
-   * Color drawable factory that is able to render a {@link CloseableColorImage} by creating
-   * a new {@link ColorDrawable} for the given color.
+   * Color drawable factory that is able to render a {@link CloseableColorImage} by creating a new
+   * {@link ColorDrawable} for the given color.
    */
   public static class ColorDrawableFactory implements DrawableFactory {
 
@@ -190,7 +203,7 @@ public class ColorImageExample {
     @Override
     public Drawable createDrawable(CloseableImage image) {
       // Just return a simple ColorDrawable with the given color value
-      return new ColorDrawable(((CloseableColorImage)image).getColor());
+      return new ColorDrawable(((CloseableColorImage) image).getColor());
     }
   }
 }

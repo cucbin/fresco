@@ -1,9 +1,10 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.backends.pipeline.info;
 
 import com.facebook.imagepipeline.producers.BitmapMemoryCacheGetProducer;
@@ -21,7 +22,9 @@ import com.facebook.imagepipeline.producers.NetworkFetchProducer;
 import com.facebook.imagepipeline.producers.PartialDiskCacheProducer;
 import com.facebook.imagepipeline.producers.PostprocessedBitmapMemoryCacheProducer;
 import com.facebook.imagepipeline.producers.QualifiedResourceFetchProducer;
+import com.facebook.infer.annotation.Nullsafe;
 
+@Nullsafe(Nullsafe.Mode.STRICT)
 public class ImageOriginUtils {
 
   public static String toString(@ImageOrigin int imageOrigin) {
@@ -34,13 +37,14 @@ public class ImageOriginUtils {
         return "memory_encoded";
       case ImageOrigin.MEMORY_BITMAP:
         return "memory_bitmap";
+      case ImageOrigin.MEMORY_BITMAP_SHORTCUT:
+        return "memory_bitmap_shortcut";
       case ImageOrigin.LOCAL:
         return "local";
       case ImageOrigin.UNKNOWN:
         // fall through
       default:
         return "unknown";
-
     }
   }
 

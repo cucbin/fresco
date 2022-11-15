@@ -1,12 +1,15 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.backends.pipeline.info;
 
 import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.CANCELED;
+import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.DRAW;
+import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.EMPTY_EVENT;
 import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.ERROR;
 import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.INTERMEDIATE_AVAILABLE;
 import static com.facebook.drawee.backends.pipeline.info.ImageLoadStatus.ORIGIN_AVAILABLE;
@@ -27,6 +30,8 @@ import java.lang.annotation.Retention;
   SUCCESS,
   CANCELED,
   ERROR,
+  DRAW,
+  EMPTY_EVENT,
 })
 public @interface ImageLoadStatus {
 
@@ -37,4 +42,6 @@ public @interface ImageLoadStatus {
   int SUCCESS = 3;
   int CANCELED = 4;
   int ERROR = 5;
+  int DRAW = 6;
+  int EMPTY_EVENT = 7;
 }

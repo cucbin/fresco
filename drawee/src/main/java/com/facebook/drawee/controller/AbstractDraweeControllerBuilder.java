@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -19,7 +19,10 @@ import com.facebook.datasource.IncreasingQualityDataSourceSupplier;
 import com.facebook.drawee.gestures.GestureDetector;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.interfaces.SimpleDraweeControllerBuilder;
+import com.facebook.fresco.ui.common.ControllerListener2;
+import com.facebook.fresco.ui.common.LoggingListener;
 import com.facebook.imagepipeline.systrace.FrescoSystrace;
+import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.infer.annotation.ReturnsOwnership;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,14 +30,13 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
-/**
- * Base implementation for Drawee controller builders.
- */
-public abstract class AbstractDraweeControllerBuilder <
-    BUILDER extends AbstractDraweeControllerBuilder<BUILDER, REQUEST, IMAGE, INFO>,
-    REQUEST,
-    IMAGE,
-    INFO>
+/** Base implementation for Drawee controller builders. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
+public abstract class AbstractDraweeControllerBuilder<
+        BUILDER extends AbstractDraweeControllerBuilder<BUILDER, REQUEST, IMAGE, INFO>,
+        REQUEST,
+        IMAGE,
+        INFO>
     implements SimpleDraweeControllerBuilder {
 
   private static final ControllerListener<Object> sAutoPlayAnimationsListener =
@@ -53,6 +55,7 @@ public abstract class AbstractDraweeControllerBuilder <
   // components
   private final Context mContext;
   private final Set<ControllerListener> mBoundControllerListeners;
+  private final Set<ControllerListener2> mBoundControllerListeners2;
 
   // builder parameters
   private @Nullable Object mCallerContext;
@@ -62,11 +65,12 @@ public abstract class AbstractDraweeControllerBuilder <
   private boolean mTryCacheOnlyFirst;
   private @Nullable Supplier<DataSource<IMAGE>> mDataSourceSupplier;
   private @Nullable ControllerListener<? super INFO> mControllerListener;
+  private @Nullable LoggingListener mLoggingListener;
   private @Nullable ControllerViewportVisibilityListener mControllerViewportVisibilityListener;
   private boolean mTapToRetryEnabled;
   private boolean mAutoPlayAnimations;
   private boolean mRetainImageOnFailure;
-  private String mContentDescription;
+  @Nullable private String mContentDescription;
   // old controller to reuse
   private @Nullable DraweeController mOldController;
 
@@ -74,9 +78,11 @@ public abstract class AbstractDraweeControllerBuilder <
 
   protected AbstractDraweeControllerBuilder(
       Context context,
-      Set<ControllerListener> boundControllerListeners) {
+      Set<ControllerListener> boundControllerListeners,
+      Set<ControllerListener2> boundControllerListeners2) {
     mContext = context;
     mBoundControllerListeners = boundControllerListeners;
+    mBoundControllerListeners2 = boundControllerListeners2;
     init();
   }
 
@@ -88,6 +94,7 @@ public abstract class AbstractDraweeControllerBuilder <
     mMultiImageRequests = null;
     mTryCacheOnlyFirst = true;
     mControllerListener = null;
+    mLoggingListener = null;
     mControllerViewportVisibilityListener = null;
     mTapToRetryEnabled = false;
     mAutoPlayAnimations = false;
@@ -115,7 +122,7 @@ public abstract class AbstractDraweeControllerBuilder <
   }
 
   /** Sets the image request. */
-  public BUILDER setImageRequest(REQUEST imageRequest) {
+  public BUILDER setImageRequest(@Nullable REQUEST imageRequest) {
     mImageRequest = imageRequest;
     return getThis();
   }
@@ -127,7 +134,7 @@ public abstract class AbstractDraweeControllerBuilder <
   }
 
   /** Sets the low-res image request. */
-  public BUILDER setLowResImageRequest(REQUEST lowResImageRequest) {
+  public BUILDER setLowResImageRequest(@Nullable REQUEST lowResImageRequest) {
     mLowResImageRequest = lowResImageRequest;
     return getThis();
   }
@@ -140,8 +147,9 @@ public abstract class AbstractDraweeControllerBuilder <
 
   /**
    * Sets the array of first-available image requests that will be probed in order.
-   * <p> For performance reasons, the array is not deep-copied, but only stored by reference.
-   * Please don't modify once submitted.
+   *
+   * <p>For performance reasons, the array is not deep-copied, but only stored by reference. Please
+   * don't modify once submitted.
    */
   public BUILDER setFirstAvailableImageRequests(REQUEST[] firstAvailableImageRequests) {
     return setFirstAvailableImageRequests(firstAvailableImageRequests, true);
@@ -149,15 +157,15 @@ public abstract class AbstractDraweeControllerBuilder <
 
   /**
    * Sets the array of first-available image requests that will be probed in order.
-   * <p> For performance reasons, the array is not deep-copied, but only stored by reference.
-   * Please don't modify once submitted.
    *
-   * @param tryCacheOnlyFirst if set, bitmap cache only requests will be tried in order before
-   *    the supplied requests.
+   * <p>For performance reasons, the array is not deep-copied, but only stored by reference. Please
+   * don't modify once submitted.
+   *
+   * @param tryCacheOnlyFirst if set, bitmap cache only requests will be tried in order before the
+   *     supplied requests.
    */
   public BUILDER setFirstAvailableImageRequests(
-      REQUEST[] firstAvailableImageRequests,
-      boolean tryCacheOnlyFirst) {
+      REQUEST[] firstAvailableImageRequests, boolean tryCacheOnlyFirst) {
     Preconditions.checkArgument(
         firstAvailableImageRequests == null || firstAvailableImageRequests.length > 0,
         "No requests specified!");
@@ -168,8 +176,9 @@ public abstract class AbstractDraweeControllerBuilder <
 
   /**
    * Gets the array of first-available image requests.
-   * <p> For performance reasons, the array is not deep-copied, but only stored by reference.
-   * Please don't modify.
+   *
+   * <p>For performance reasons, the array is not deep-copied, but only stored by reference. Please
+   * don't modify.
    */
   @Nullable
   public REQUEST[] getFirstAvailableImageRequests() {
@@ -177,9 +186,9 @@ public abstract class AbstractDraweeControllerBuilder <
   }
 
   /**
-   *  Sets the data source supplier to be used.
+   * Sets the data source supplier to be used.
    *
-   *  <p/> Note: This is mutually exclusive with other image request setters.
+   * <p>Note: This is mutually exclusive with other image request setters.
    */
   public BUILDER setDataSourceSupplier(@Nullable Supplier<DataSource<IMAGE>> dataSourceSupplier) {
     mDataSourceSupplier = dataSourceSupplier;
@@ -189,8 +198,8 @@ public abstract class AbstractDraweeControllerBuilder <
   /**
    * Gets the data source supplier if set.
    *
-   * <p/>Important: this only returns the externally set data source (if any). Subclasses should
-   * use {#code obtainDataSourceSupplier()} to obtain a data source to be passed to the controller.
+   * <p>Important: this only returns the externally set data source (if any). Subclasses should use
+   * {#code obtainDataSourceSupplier()} to obtain a data source to be passed to the controller.
    */
   @Nullable
   public Supplier<DataSource<IMAGE>> getDataSourceSupplier() {
@@ -235,6 +244,16 @@ public abstract class AbstractDraweeControllerBuilder <
       @Nullable ControllerListener<? super INFO> controllerListener) {
     mControllerListener = controllerListener;
     return getThis();
+  }
+
+  public BUILDER setLoggingListener(@Nullable LoggingListener loggingListener) {
+    mLoggingListener = loggingListener;
+    return getThis();
+  }
+
+  @Nullable
+  public LoggingListener getLoggingListener() {
+    return mLoggingListener;
   }
 
   /** Gets the controller listener */
@@ -301,8 +320,10 @@ public abstract class AbstractDraweeControllerBuilder <
         (mMultiImageRequests == null) || (mImageRequest == null),
         "Cannot specify both ImageRequest and FirstAvailableImageRequests!");
     Preconditions.checkState(
-        (mDataSourceSupplier == null) ||
-            (mMultiImageRequests == null && mImageRequest == null && mLowResImageRequest == null),
+        (mDataSourceSupplier == null)
+            || (mMultiImageRequests == null
+                && mImageRequest == null
+                && mLowResImageRequest == null),
         "Cannot specify DataSourceSupplier with other ImageRequests! Use one or the other.");
   }
 
@@ -400,6 +421,7 @@ public abstract class AbstractDraweeControllerBuilder <
       @Override
       public DataSource<IMAGE> get() {
         return getDataSourceForRequest(
+            // NULLSAFE_FIXME[Parameter Not Nullable]
             controller, controllerId, imageRequest, callerContext, cacheLevel);
       }
 
@@ -415,6 +437,11 @@ public abstract class AbstractDraweeControllerBuilder <
     if (mBoundControllerListeners != null) {
       for (ControllerListener<? super INFO> listener : mBoundControllerListeners) {
         controller.addControllerListener(listener);
+      }
+    }
+    if (mBoundControllerListeners2 != null) {
+      for (ControllerListener2<INFO> listener : mBoundControllerListeners2) {
+        controller.addControllerListener2(listener);
       }
     }
     if (mControllerListener != null) {
@@ -449,7 +476,8 @@ public abstract class AbstractDraweeControllerBuilder <
   }
 
   /** Concrete builder classes should override this method to return a new controller. */
-  @ReturnsOwnership protected abstract AbstractDraweeController obtainController();
+  @ReturnsOwnership
+  protected abstract AbstractDraweeController obtainController();
 
   /**
    * Concrete builder classes should override this method to return a data source for the request.

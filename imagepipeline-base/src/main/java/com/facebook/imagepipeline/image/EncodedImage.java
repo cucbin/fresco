@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,9 +10,9 @@ package com.facebook.imagepipeline.image;
 import android.graphics.ColorSpace;
 import android.media.ExifInterface;
 import android.util.Pair;
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
-import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.memory.PooledByteBufferInputStream;
 import com.facebook.common.references.CloseableReference;
@@ -26,6 +26,7 @@ import com.facebook.imageutils.HeifExifUtil;
 import com.facebook.imageutils.ImageMetaData;
 import com.facebook.imageutils.JfifUtil;
 import com.facebook.imageutils.WebpUtil;
+import com.facebook.infer.annotation.FalseOnNull;
 import java.io.Closeable;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -34,9 +35,9 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Class that contains all the information for an encoded image, both the image bytes (held on
- * a byte buffer or a supplier of input streams) and the extracted meta data that is useful for
- * image transforms.
+ * Class that contains all the information for an encoded image, both the image bytes (held on a
+ * byte buffer or a supplier of input streams) and the extracted meta data that is useful for image
+ * transforms.
  *
  * <p>Only one of the input stream supplier or the byte buffer can be set. If using an input stream
  * supplier, the methods that return a byte buffer will simply return null. However, getInputStream
@@ -54,6 +55,8 @@ public class EncodedImage implements Closeable {
 
   public static final int DEFAULT_SAMPLE_SIZE = 1;
 
+  private static boolean sUseCachedMetadata;
+
   // Only one of this will be set. The EncodedImage can either be backed by a ByteBuffer or a
   // Supplier of InputStream, but not both.
   private final @Nullable CloseableReference<PooledByteBuffer> mPooledByteBufferRef;
@@ -68,6 +71,8 @@ public class EncodedImage implements Closeable {
   private int mStreamSize = UNKNOWN_STREAM_SIZE;
   private @Nullable BytesRange mBytesRange;
   private @Nullable ColorSpace mColorSpace;
+  private @Nullable String mSource;
+  private boolean mHasParsedMetadata;
 
   public EncodedImage(CloseableReference<PooledByteBuffer> pooledByteBufferRef) {
     Preconditions.checkArgument(CloseableReference.isValid(pooledByteBufferRef));
@@ -91,14 +96,14 @@ public class EncodedImage implements Closeable {
    *
    * @param encodedImage the EncodedImage to clone
    */
-  public static @Nullable EncodedImage cloneOrNull(EncodedImage encodedImage) {
+  public static @Nullable EncodedImage cloneOrNull(@Nullable EncodedImage encodedImage) {
     return encodedImage != null ? encodedImage.cloneOrNull() : null;
   }
 
   public @Nullable EncodedImage cloneOrNull() {
     EncodedImage encodedImage;
     if (mInputStreamSupplier != null) {
-        encodedImage = new EncodedImage(mInputStreamSupplier, mStreamSize);
+      encodedImage = new EncodedImage(mInputStreamSupplier, mStreamSize);
     } else {
       CloseableReference<PooledByteBuffer> pooledByteBufferRef =
           CloseableReference.cloneOrNull(mPooledByteBufferRef);
@@ -115,9 +120,7 @@ public class EncodedImage implements Closeable {
     return encodedImage;
   }
 
-  /**
-   * Closes the buffer enclosed by this class.
-   */
+  /** Closes the buffer enclosed by this class. */
   @Override
   public void close() {
     CloseableReference.closeSafely(mPooledByteBufferRef);
@@ -162,30 +165,26 @@ public class EncodedImage implements Closeable {
     return null;
   }
 
-  /**
-   * Sets the image format
-   */
+  public InputStream getInputStreamOrThrow() {
+    return Preconditions.checkNotNull(getInputStream());
+  }
+
+  /** Sets the image format */
   public void setImageFormat(ImageFormat imageFormat) {
     this.mImageFormat = imageFormat;
   }
 
-  /**
-   * Sets the image height
-   */
+  /** Sets the image height */
   public void setHeight(int height) {
     this.mHeight = height;
   }
 
-  /**
-   * Sets the image width
-   */
+  /** Sets the image width */
   public void setWidth(int width) {
     this.mWidth = width;
   }
 
-  /**
-   * Sets the image rotation angle
-   */
+  /** Sets the image rotation angle */
   public void setRotationAngle(int rotationAngle) {
     this.mRotationAngle = rotationAngle;
   }
@@ -203,7 +202,7 @@ public class EncodedImage implements Closeable {
   /**
    * Sets the size of an image if backed by an InputStream
    *
-   * <p> Ignored if backed by a ByteBuffer
+   * <p>Ignored if backed by a ByteBuffer
    */
   public void setStreamSize(int streamSize) {
     this.mStreamSize = streamSize;
@@ -213,40 +212,45 @@ public class EncodedImage implements Closeable {
     mBytesRange = bytesRange;
   }
 
-  /**
-   * Returns the image format if known, otherwise ImageFormat.UNKNOWN.
-   */
+  public void setSource(@Nullable String source) {
+    mSource = source;
+  }
+
+  @Nullable
+  public String getSource() {
+    return mSource;
+  }
+
+  /** Returns the image format if known, otherwise ImageFormat.UNKNOWN. */
   public ImageFormat getImageFormat() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mImageFormat;
   }
 
   /**
    * @return the rotation angle if the rotation angle is known, else -1. The rotation angle may not
-   * be known if the image is incomplete (e.g. for progressive JPEGs).
+   *     be known if the image is incomplete (e.g. for progressive JPEGs).
    */
   public int getRotationAngle() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mRotationAngle;
   }
 
   /** Returns the exif orientation if known (1 - 8), else 0. */
   public int getExifOrientation() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mExifOrientation;
   }
 
   /** Returns the image width if known, else -1. */
   public int getWidth() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mWidth;
   }
 
-  /**
-   * Returns the image height if known, else -1.
-   */
+  /** Returns the image height if known, else -1. */
   public int getHeight() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mHeight;
   }
 
@@ -256,7 +260,7 @@ public class EncodedImage implements Closeable {
    * @return the color space of the image if known, else null.
    */
   public @Nullable ColorSpace getColorSpace() {
-    parseMetaDataIfNeeded();
+    parseMetadataIfNeeded();
     return mColorSpace;
   }
 
@@ -275,11 +279,11 @@ public class EncodedImage implements Closeable {
   }
 
   /**
-   * Returns true if the image is a JPEG and its data is already complete at the specified length,
-   * false otherwise.
+   * Returns true if the image is a JPEG or DNG and its data is already complete at the specified
+   * length, false otherwise.
    */
   public boolean isCompleteAt(int length) {
-    if (mImageFormat != DefaultImageFormats.JPEG) {
+    if (mImageFormat != DefaultImageFormats.JPEG && mImageFormat != DefaultImageFormats.DNG) {
       return true;
     }
     // If the image is backed by FileInputStreams return true since they will always be complete.
@@ -296,7 +300,7 @@ public class EncodedImage implements Closeable {
   /**
    * Returns the size of the backing structure.
    *
-   * <p> If it's a PooledByteBuffer returns its size if its not null, -1 otherwise. If it's an
+   * <p>If it's a PooledByteBuffer returns its size if its not null, -1 otherwise. If it's an
    * InputStream, return the size if it was set, -1 otherwise.
    */
   public int getSize() {
@@ -336,16 +340,29 @@ public class EncodedImage implements Closeable {
   }
 
   /** Sets the encoded image meta data if needed. */
-  private void parseMetaDataIfNeeded() {
+  private void parseMetadataIfNeeded() {
     if (mWidth < 0 || mHeight < 0) {
       parseMetaData();
     }
   }
 
-  /** Sets the encoded image meta data. */
   public void parseMetaData() {
-    final ImageFormat imageFormat = ImageFormatChecker.getImageFormat_WrapIOException(
-        getInputStream());
+    if (!sUseCachedMetadata) {
+      internalParseMetaData();
+      return;
+    }
+
+    if (mHasParsedMetadata) {
+      return;
+    }
+    internalParseMetaData();
+    mHasParsedMetadata = true;
+  }
+
+  /** Sets the encoded image meta data. */
+  private void internalParseMetaData() {
+    final ImageFormat imageFormat =
+        ImageFormatChecker.getImageFormat_WrapIOException(getInputStream());
     mImageFormat = imageFormat;
     // BitmapUtil.decodeDimensions has a bug where it will return 100x100 for some WebPs even though
     // those are not its actual dimensions
@@ -365,14 +382,13 @@ public class EncodedImage implements Closeable {
         && mRotationAngle == UNKNOWN_ROTATION_ANGLE) {
       mExifOrientation = HeifExifUtil.getOrientation(getInputStream());
       mRotationAngle = JfifUtil.getAutoRotateAngleFromOrientation(mExifOrientation);
-    } else {
+    } else if (mRotationAngle == UNKNOWN_ROTATION_ANGLE) {
       mRotationAngle = 0;
     }
   }
 
-  /**
-   * We get the size from a WebP image
-   */
+  /** We get the size from a WebP image */
+  @Nullable
   private Pair<Integer, Integer> readWebPImageSize() {
     final Pair<Integer, Integer> dimensions = WebpUtil.getSize(getInputStream());
     if (dimensions != null) {
@@ -387,7 +403,7 @@ public class EncodedImage implements Closeable {
     InputStream inputStream = null;
     ImageMetaData metaData = null;
     try {
-      inputStream = getInputStream();
+      inputStream = this.getInputStream();
       metaData = BitmapUtil.decodeDimensionsAndColorSpace(inputStream);
       mColorSpace = metaData.getColorSpace();
       Pair<Integer, Integer> dimensions = metaData.getDimensions();
@@ -422,11 +438,10 @@ public class EncodedImage implements Closeable {
     mStreamSize = encodedImage.getSize();
     mBytesRange = encodedImage.getBytesRange();
     mColorSpace = encodedImage.getColorSpace();
+    mHasParsedMetadata = encodedImage.hasParsedMetaData();
   }
 
-  /**
-   * Returns true if all the image information has loaded, false otherwise.
-   */
+  /** Returns true if all the image information has loaded, false otherwise. */
   public static boolean isMetaDataAvailable(EncodedImage encodedImage) {
     return encodedImage.mRotationAngle >= 0
         && encodedImage.mWidth >= 0
@@ -446,8 +461,10 @@ public class EncodedImage implements Closeable {
 
   /**
    * Checks if the encoded image is valid i.e. is not null, and is not closed.
+   *
    * @return true if the encoded image is valid
    */
+  @FalseOnNull
   public static boolean isValid(@Nullable EncodedImage encodedImage) {
     return encodedImage != null && encodedImage.isValid();
   }
@@ -459,7 +476,16 @@ public class EncodedImage implements Closeable {
    */
   @VisibleForTesting
   public synchronized @Nullable SharedReference<PooledByteBuffer> getUnderlyingReferenceTestOnly() {
-    return (mPooledByteBufferRef != null) ?
-        mPooledByteBufferRef.getUnderlyingReferenceTestOnly() : null;
+    return (mPooledByteBufferRef != null)
+        ? mPooledByteBufferRef.getUnderlyingReferenceTestOnly()
+        : null;
+  }
+
+  public static void setUseCachedMetadata(boolean useCachedMetadata) {
+    sUseCachedMetadata = useCachedMetadata;
+  }
+
+  protected boolean hasParsedMetaData() {
+    return mHasParsedMetadata;
   }
 }

@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imagepipeline;
 
 import android.net.Uri;
@@ -44,7 +40,9 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
 
   private Uri[] mUris;
 
-  private Button mPrefetchButton;
+  private Button mPrefetchDiskButton;
+  private Button mPrefetchEncodedButton;
+  private Button mPrefetchBitmapButton;
   private TextView mPrefetchStatus;
   private ViewGroup mDraweesHolder;
   private final Handler mHandler = new Handler();
@@ -76,11 +74,6 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
         }
       };
 
-  @Override
-  public int getTitleId() {
-    return R.string.imagepipeline_prefetch_title;
-  }
-
   private class PrefetchSubscriber extends BaseDataSubscriber<Void> {
 
     private int mSuccessful = 0;
@@ -100,7 +93,9 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
 
     private void updateDisplay() {
       if (mSuccessful + mFailed == mUris.length) {
-        mPrefetchButton.setEnabled(true);
+        mPrefetchDiskButton.setEnabled(true);
+        mPrefetchEncodedButton.setEnabled(true);
+        mPrefetchBitmapButton.setEnabled(true);
       }
       mPrefetchStatus.setText(
           getString(R.string.prefetch_status, mSuccessful, mUris.length, mFailed));
@@ -128,29 +123,61 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
         };
 
     final Button clearCacheButton = (Button) view.findViewById(R.id.clear_cache);
-    clearCacheButton.setOnClickListener(new View.OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        for (Uri uri : mUris) {
-          Fresco.getImagePipeline().evictFromCache(uri);
-        }
-      }
-    });
+    clearCacheButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            for (Uri uri : mUris) {
+              Fresco.getImagePipeline().evictFromCache(uri);
+            }
+          }
+        });
 
     mPrefetchStatus = (TextView) view.findViewById(R.id.prefetch_status);
-    mPrefetchButton = (Button) view.findViewById(R.id.prefetch_now);
-    mPrefetchButton.setOnClickListener(new View.OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        mPrefetchButton.setEnabled(false);
-        final PrefetchSubscriber subscriber = new PrefetchSubscriber();
-        for (Uri uri : mUris) {
-          final DataSource<Void> ds =
-              Fresco.getImagePipeline().prefetchToDiskCache(ImageRequest.fromUri(uri), null);
-          ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
-        }
-      }
-    });
+    mPrefetchDiskButton = (Button) view.findViewById(R.id.prefetch_disk_now);
+    mPrefetchDiskButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchDiskButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToDiskCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
+
+    mPrefetchEncodedButton = (Button) view.findViewById(R.id.prefetch_encoded_now);
+    mPrefetchEncodedButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchEncodedButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToEncodedCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
+
+    mPrefetchBitmapButton = (Button) view.findViewById(R.id.prefetch_bitmap_now);
+    mPrefetchBitmapButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchBitmapButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToBitmapCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
 
     mDraweesHolder = (ViewGroup) view.findViewById(R.id.drawees);
     Button toggleImages = (Button) view.findViewById(R.id.toggle_images);

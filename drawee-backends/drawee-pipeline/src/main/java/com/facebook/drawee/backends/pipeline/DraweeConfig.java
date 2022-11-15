@@ -1,9 +1,10 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.backends.pipeline;
 
 import com.facebook.common.internal.ImmutableList;
@@ -12,29 +13,29 @@ import com.facebook.common.internal.Supplier;
 import com.facebook.common.internal.Suppliers;
 import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
-/**
- * Drawee configuration.
- */
+/** Drawee configuration. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DraweeConfig {
 
-  @Nullable
-  private final ImmutableList<DrawableFactory> mCustomDrawableFactories;
-  @Nullable
-  private final PipelineDraweeControllerFactory mPipelineDraweeControllerFactory;
+  @Nullable private final ImmutableList<DrawableFactory> mCustomDrawableFactories;
+  @Nullable private final PipelineDraweeControllerFactory mPipelineDraweeControllerFactory;
   private final Supplier<Boolean> mDebugOverlayEnabledSupplier;
   @Nullable private final ImagePerfDataListener mImagePerfDataListener;
 
   private DraweeConfig(Builder builder) {
-    mCustomDrawableFactories = builder.mCustomDrawableFactories != null
-        ? ImmutableList.copyOf(builder.mCustomDrawableFactories)
-        : null;
-    mDebugOverlayEnabledSupplier = builder.mDebugOverlayEnabledSupplier != null
-        ? builder.mDebugOverlayEnabledSupplier
-        : Suppliers.of(false);
+    mCustomDrawableFactories =
+        builder.mCustomDrawableFactories != null
+            ? ImmutableList.copyOf(builder.mCustomDrawableFactories)
+            : null;
+    mDebugOverlayEnabledSupplier =
+        builder.mDebugOverlayEnabledSupplier != null
+            ? builder.mDebugOverlayEnabledSupplier
+            : Suppliers.of(false);
     mPipelineDraweeControllerFactory = builder.mPipelineDraweeControllerFactory;
     mImagePerfDataListener = builder.mImagePerfDataListener;
   }
@@ -64,14 +65,14 @@ public class DraweeConfig {
 
   public static class Builder {
 
-    private List<DrawableFactory> mCustomDrawableFactories;
-    private Supplier<Boolean> mDebugOverlayEnabledSupplier;
-    private PipelineDraweeControllerFactory mPipelineDraweeControllerFactory;
+    @Nullable private List<DrawableFactory> mCustomDrawableFactories;
+    @Nullable private Supplier<Boolean> mDebugOverlayEnabledSupplier;
+    @Nullable private PipelineDraweeControllerFactory mPipelineDraweeControllerFactory;
     private @Nullable ImagePerfDataListener mImagePerfDataListener;
 
     /**
-     * Add a custom drawable factory that will be used to create
-     * Drawables for {@link com.facebook.imagepipeline.image.CloseableImage}s.
+     * Add a custom drawable factory that will be used to create Drawables for {@link
+     * com.facebook.imagepipeline.image.CloseableImage}s.
      *
      * @param factory the factory to use
      * @return the builder
@@ -85,8 +86,8 @@ public class DraweeConfig {
     }
 
     /**
-     * Set whether a debug overlay that displays image information, like dimensions and size
-     * should be drawn on top of a Drawee view.
+     * Set whether a debug overlay that displays image information, like dimensions and size should
+     * be drawn on top of a Drawee view.
      *
      * @param drawDebugOverlay <code>true</code> if the debug overlay should be drawn
      * @return the builder
@@ -96,11 +97,11 @@ public class DraweeConfig {
     }
 
     /**
-     * Set whether a debug overlay that displays image information, like dimensions and size
-     * should be drawn on top of a Drawee view.
+     * Set whether a debug overlay that displays image information, like dimensions and size should
+     * be drawn on top of a Drawee view.
      *
      * @param debugOverlayEnabledSupplier should return <code>true</code> if the debug overlay
-     * should be drawn
+     *     should be drawn
      * @return the builder
      */
     public Builder setDebugOverlayEnabledSupplier(Supplier<Boolean> debugOverlayEnabledSupplier) {
