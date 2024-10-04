@@ -16,8 +16,6 @@ import com.facebook.common.logging.FLog
 import com.facebook.common.memory.manager.NoOpDebugMemoryManager
 import com.facebook.drawee.backends.pipeline.DraweeConfig
 import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.backends.pipeline.info.ImagePerfData
-import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener
 import com.facebook.flipper.android.AndroidFlipperClient
 import com.facebook.flipper.android.utils.FlipperUtils
 import com.facebook.flipper.perflogger.NoOpFlipperPerfLogger
@@ -29,6 +27,10 @@ import com.facebook.fresco.samples.showcase.misc.DebugOverlaySupplierSingleton
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider
 import com.facebook.fresco.samples.showcase.misc.LogcatRequestListener2
 import com.facebook.fresco.samples.showcase.settings.SettingsFragment.KEY_VITO_KOTLIN
+import com.facebook.fresco.ui.common.ImageLoadStatus
+import com.facebook.fresco.ui.common.ImagePerfData
+import com.facebook.fresco.ui.common.ImagePerfDataListener
+import com.facebook.fresco.ui.common.VisibilityState
 import com.facebook.fresco.vito.core.DefaultFrescoVitoConfig
 import com.facebook.fresco.vito.core.FrescoVitoConfig
 import com.facebook.fresco.vito.core.impl.DebugOverlayHandler
@@ -48,6 +50,7 @@ import com.facebook.imagepipeline.listener.ForwardingRequestListener
 import com.facebook.imagepipeline.listener.RequestListener
 import com.facebook.imagepipeline.listener.RequestLoggingListener
 import com.facebook.imagepipeline.stetho.FrescoStethoPlugin
+import com.facebook.soloader.SoLoader
 import com.facebook.stetho.Stetho
 import com.facebook.stetho.okhttp3.StethoInterceptor
 import okhttp3.OkHttpClient
@@ -78,14 +81,15 @@ class ShowcaseApplication : Application() {
             .setRequestListener2s(requestListener2s)
             .setProgressiveJpegConfig(SimpleProgressiveJpegConfig())
             .setImageDecoderConfig(CustomImageFormatConfigurator.createImageDecoderConfig(this))
-            .experiment()
-            .setBitmapPrepareToDraw(true, 0, Integer.MAX_VALUE, true)
 
     if (shouldEnableFlipper()) {
       imagePipelineConfigBuilder.setCacheKeyFactory(FlipperCacheKeyFactory(sFlipperImageTracker))
     }
 
-    imagePipelineConfigBuilder.experiment().setDownsampleIfLargeBitmap(true)
+    imagePipelineConfigBuilder
+        .experiment()
+        .setBitmapPrepareToDraw(true, 0, Integer.MAX_VALUE, true)
+        .setDownsampleIfLargeBitmap(true)
 
     val imagePipelineConfig = imagePipelineConfigBuilder.build()
     ImagePipelineConfig.defaultImageRequestConfig.isProgressiveRenderingEnabled = true
@@ -101,7 +105,7 @@ class ShowcaseApplication : Application() {
           object : ImagePerfDataListener {
             override fun onImageLoadStatusUpdated(
                 imagePerfData: ImagePerfData,
-                imageLoadStatus: Int
+                imageLoadStatus: ImageLoadStatus
             ) {
               frescoFlipperPlugin
                   ?.flipperImageTracker
@@ -111,7 +115,7 @@ class ShowcaseApplication : Application() {
 
             override fun onImageVisibilityUpdated(
                 imagePerfData: ImagePerfData,
-                visibilityState: Int
+                visibilityState: VisibilityState
             ) {
               // nop
             }
@@ -134,6 +138,8 @@ class ShowcaseApplication : Application() {
             .build())
 
     if (shouldEnableFlipper()) {
+      SoLoader.init(this, 0)
+
       frescoFlipperPlugin =
           FrescoFlipperPlugin(
               sFlipperImageTracker,
@@ -163,12 +169,12 @@ class ShowcaseApplication : Application() {
               vitoConfig,
               ImagePipelineFactory.getInstance().imagePipeline,
               FrescoVito.createImagePipelineUtils(Suppliers.BOOLEAN_TRUE),
+              UiThreadImmediateExecutorService.getInstance(),
               ImagePipelineFactory.getInstance()
                   .imagePipeline
                   .config
                   .executorSupplier
                   .forLightweightBackgroundTasks(),
-              UiThreadImmediateExecutorService.getInstance(),
               NoOpCallerContextVerifier,
               DebugOverlayHandler(DebugOverlaySupplierSingleton.getInstance(applicationContext))))
     } else {
@@ -188,8 +194,10 @@ class ShowcaseApplication : Application() {
     private val sFlipperImageTracker = FlipperImageTracker()
     lateinit var imageTracker: ImageTracker
       private set
+
     lateinit var imageUriProvider: ImageUriProvider
       private set
+
     lateinit var imageSelector: ImageSelector
       private set
   }

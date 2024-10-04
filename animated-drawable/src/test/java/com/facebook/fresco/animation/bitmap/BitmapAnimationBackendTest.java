@@ -7,7 +7,7 @@
 
 package com.facebook.fresco.animation.bitmap;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -372,7 +372,7 @@ public class BitmapAnimationBackendTest {
   private void verifyFramePreparationStrategyCalled(int frameNumber) {
     verify(mBitmapFramePreparationStrategy)
         .prepareFrames(
-            mBitmapFramePreparer, mBitmapFrameCache, mBitmapAnimationBackend, frameNumber);
+            mBitmapFramePreparer, mBitmapFrameCache, mBitmapAnimationBackend, frameNumber, null);
   }
 
   private void verifyListenersAndCacheNotified(

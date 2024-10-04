@@ -8,7 +8,9 @@
 package com.facebook.fresco.vito.core.impl
 
 import android.content.res.Resources
+import android.graphics.drawable.Drawable
 import com.facebook.fresco.vito.options.ImageOptions
+import com.facebook.fresco.vito.renderer.DrawableImageDataModel
 import com.facebook.fresco.vito.renderer.ImageDataModel
 import com.facebook.imagepipeline.image.CloseableImage
 
@@ -20,6 +22,18 @@ fun ImageLayerDataModel.setActualImage(
 ) {
   configure(
       dataModel = imageToDataModelMapper(resources, closeableImage, imageOptions),
+      canvasTransformation = imageOptions.createActualImageCanvasTransformation(),
+      roundingOptions = imageOptions.roundingOptions,
+      borderOptions = imageOptions.borderOptions,
+      colorFilter = imageOptions.actualImageColorFilter)
+}
+
+fun ImageLayerDataModel.setActualImageDrawable(
+    imageOptions: ImageOptions,
+    actualImageDrawable: Drawable
+) {
+  configure(
+      dataModel = DrawableImageDataModel(actualImageDrawable),
       canvasTransformation = imageOptions.createActualImageCanvasTransformation(),
       roundingOptions = imageOptions.roundingOptions,
       borderOptions = imageOptions.borderOptions,

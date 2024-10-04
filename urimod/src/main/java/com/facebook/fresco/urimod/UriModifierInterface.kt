@@ -8,20 +8,44 @@
 package com.facebook.fresco.urimod
 
 import android.net.Uri
+import com.facebook.common.callercontext.ContextChain
 import com.facebook.drawee.drawable.ScalingUtils.ScaleType
-
-data class Dimensions(val w: Int, val h: Int) {
-  override fun toString() = "${w}x${h}"
-}
+import com.facebook.fresco.vito.source.UriImageSource
 
 interface UriModifierInterface {
-  fun modifyUri(uri: Uri, viewport: Dimensions?, scaleType: ScaleType): Uri
-}
 
-object NopUriModifier : UriModifierInterface {
-  override fun modifyUri(uri: Uri, viewport: Dimensions?, scaleType: ScaleType): Uri = uri
-}
+  fun modifyUri(
+      imageSource: UriImageSource,
+      viewport: Dimensions?,
+      scaleType: ScaleType?,
+      callerContext: Any?,
+      contextChain: ContextChain? = null
+  ): ModificationResult
 
-object UriModifier {
-  @JvmField var INSTANCE: UriModifierInterface = NopUriModifier
+  fun modifyPrefetchUri(uri: Uri, callerContext: Any?): Uri?
+
+  sealed class ModificationResult(private val comment: String) {
+
+    abstract val bestAllowlistedSize: Int?
+
+    override fun toString(): String = comment
+
+    class Disabled(comment: String) : ModificationResult("Disabled:$comment") {
+      override val bestAllowlistedSize: Int? = null
+    }
+
+    sealed class Modified(val newUri: Uri, comment: String) : ModificationResult(comment) {
+      class ModifiedToAllowlistedSize(newUrl: Uri, override val bestAllowlistedSize: Int?) :
+          Modified(newUrl, "ModifiedToAllowlistedSize")
+
+      class ModifiedToMaxDimens(newUrl: Uri, override val bestAllowlistedSize: Int?) :
+          Modified(newUrl, "ModifiedToMaxDimens")
+    }
+
+    data class FallbackToOriginalUrl(override val bestAllowlistedSize: Int?) :
+        ModificationResult("FallbackToOriginalUrl")
+
+    data class Unmodified(val reason: String, override val bestAllowlistedSize: Int?) :
+        ModificationResult("Unmodified(reason='$reason'")
+  }
 }

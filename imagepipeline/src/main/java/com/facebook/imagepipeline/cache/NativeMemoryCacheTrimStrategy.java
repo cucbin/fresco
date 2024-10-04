@@ -18,7 +18,7 @@ import com.facebook.infer.annotation.Nullsafe;
  * <p>In case of OnCloseToDalvikHeapLimit nothing will be done. In case of other trim types eviction
  * queue of the cache will be cleared.
  */
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class NativeMemoryCacheTrimStrategy implements MemoryCache.CacheTrimStrategy {
   private static final String TAG = "NativeMemoryCacheTrimStrategy";
 
@@ -33,7 +33,7 @@ public class NativeMemoryCacheTrimStrategy implements MemoryCache.CacheTrimStrat
       case OnAppBackgrounded:
       case OnSystemMemoryCriticallyLowWhileAppInForeground:
       case OnSystemLowMemoryWhileAppInForeground:
-      case OnSystemLowMemoryWhileAppInBackground:
+      case OnSystemLowMemoryWhileAppInBackgroundLowSeverity:
         return 1;
       default:
         FLog.wtf(TAG, "unknown trim type: %s", trimType);

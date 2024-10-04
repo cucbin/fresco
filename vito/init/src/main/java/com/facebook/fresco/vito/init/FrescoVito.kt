@@ -13,16 +13,20 @@ import com.facebook.common.internal.Supplier
 import com.facebook.common.internal.Suppliers
 import com.facebook.fresco.vito.core.DefaultFrescoVitoConfig
 import com.facebook.fresco.vito.core.FrescoVitoConfig
+import com.facebook.fresco.vito.core.ImagePerfLoggingListener
 import com.facebook.fresco.vito.core.ImagePipelineUtils
 import com.facebook.fresco.vito.core.VitoImagePerfListener
 import com.facebook.fresco.vito.core.impl.BaseVitoImagePerfListener
 import com.facebook.fresco.vito.core.impl.DefaultImageDecodeOptionsProviderImpl
 import com.facebook.fresco.vito.core.impl.ImagePipelineUtilsImpl
 import com.facebook.fresco.vito.core.impl.ImagePipelineUtilsImpl.CircularBitmapRounding
+import com.facebook.fresco.vito.core.impl.debug.DefaultDebugOverlayFactory2
+import com.facebook.fresco.vito.core.impl.debug.NoOpDebugOverlayFactory2
 import com.facebook.fresco.vito.nativecode.NativeCircularBitmapRounding
-import com.facebook.fresco.vito.provider.FrescoVitoProvider
+import com.facebook.fresco.vito.provider.components.FrescoVitoComponents
 import com.facebook.fresco.vito.provider.impl.DefaultFrescoVitoProvider
 import com.facebook.fresco.vito.provider.impl.NoOpCallerContextVerifier
+import com.facebook.fresco.vito.provider.setup.FrescoVitoSetup
 import com.facebook.imagepipeline.core.ImagePipeline
 import com.facebook.imagepipeline.core.ImagePipelineFactory
 import java.util.concurrent.Executor
@@ -45,19 +49,26 @@ class FrescoVito {
     @JvmOverloads
     @JvmStatic
     fun initialize(
-        imagePipeline: ImagePipeline = ImagePipelineFactory.getInstance().imagePipeline,
-        lightweightBackgroundThreadExecutor: Executor =
-            imagePipeline.config.executorSupplier.forLightweightBackgroundTasks(),
-        uiThreadExecutor: Executor = UiThreadImmediateExecutorService.getInstance(),
-        debugOverlayEnabledSupplier: Supplier<Boolean?>? = null,
+        imagePipeline: ImagePipeline? = null,
+        lightweightBackgroundThreadExecutor: Executor? = null,
+        uiThreadExecutor: Executor? = null,
+        debugOverlayEnabledSupplier: Supplier<Boolean>? = null,
         useNativeCode: Supplier<Boolean> = Suppliers.BOOLEAN_TRUE,
         vitoConfig: FrescoVitoConfig = DefaultFrescoVitoConfig(),
         callerContextVerifier: CallerContextVerifier = NoOpCallerContextVerifier,
-        vitoImagePerfListener: VitoImagePerfListener = BaseVitoImagePerfListener()
+        vitoImagePerfListener: VitoImagePerfListener = BaseVitoImagePerfListener(),
+        imagePerfListenerSupplier: Supplier<ImagePerfLoggingListener>? = null,
+        showExtendedDebugOverlayInformation: Boolean = true,
+        showExtendedImageSourceExtraInformation: Boolean = false,
     ) {
       if (isInitialized) {
         return
       }
+      val imagePipeline = imagePipeline ?: ImagePipelineFactory.getInstance().imagePipeline
+      val lightweightBackgroundThreadExecutor =
+          lightweightBackgroundThreadExecutor
+              ?: imagePipeline.config.executorSupplier.forLightweightBackgroundTasks()
+      val uiThreadExecutor = uiThreadExecutor ?: UiThreadImmediateExecutorService.getInstance()
       initialize(
           DefaultFrescoVitoProvider(
               vitoConfig,
@@ -65,9 +76,15 @@ class FrescoVito {
               createImagePipelineUtils(useNativeCode),
               lightweightBackgroundThreadExecutor,
               uiThreadExecutor,
-              debugOverlayEnabledSupplier,
               callerContextVerifier,
-              vitoImagePerfListener))
+              vitoImagePerfListener,
+              debugOverlayEnabledSupplier?.let {
+                DefaultDebugOverlayFactory2(
+                    showExtendedDebugOverlayInformation,
+                    showExtendedImageSourceExtraInformation,
+                    it)
+              } ?: NoOpDebugOverlayFactory2(),
+              imagePerfListenerSupplier))
     }
 
     /**
@@ -77,11 +94,11 @@ class FrescoVito {
      * @param providerImplementation the provider implementation to be used
      */
     @Synchronized
-    fun initialize(providerImplementation: FrescoVitoProvider.Implementation) {
+    fun initialize(providerImplementation: FrescoVitoSetup) {
       if (isInitialized) {
         return
       }
-      FrescoVitoProvider.setImplementation(providerImplementation)
+      FrescoVitoComponents.setImplementation(providerImplementation)
       isInitialized = true
     }
 

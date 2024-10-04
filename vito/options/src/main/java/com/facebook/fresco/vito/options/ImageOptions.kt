@@ -32,6 +32,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
   val progressScaleType: ScalingUtils.ScaleType? = builder._progressScaleType
 
   // Error
+  @get:ColorInt @ColorInt val errorColor: Int? = builder._errorColor
   @get:DrawableRes @DrawableRes val errorRes: Int = builder._errorRes
   val errorScaleType: ScalingUtils.ScaleType? = builder._errorScaleType
   val errorFocusPoint: PointF? = builder._errorFocusPoint
@@ -44,6 +45,10 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
   // Overlay
   @get:DrawableRes @DrawableRes val overlayRes: Int = builder._overlayRes
   val overlayDrawable: Drawable? = builder._overlayDrawable
+
+  // Background
+  val backgroundDrawable: Drawable? = builder._backgroundDrawable
+
   private val _resizeToViewport: Boolean = builder._resizeToViewport
   val fadeDurationMs: Int = builder._fadeDurationMs
   private val _autoPlay: Boolean = builder._autoPlay
@@ -51,10 +56,13 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
   val isPerfMediaRemountInstrumentationFix: Boolean = builder._perfMediaRemountInstrumentationFix
   val customDrawableFactory: ImageOptionsDrawableFactory? = builder._customDrawableFactory
   val experimentalDynamicSize: Boolean = builder._experimentalDynamicSize
+  val experimentalDynamicSizeWithCacheFallback: Boolean =
+      builder._experimentalDynamicSizeWithCacheFallback
 
   fun extend(): Builder = extend(this)
 
   fun shouldAutoPlay(): Boolean = _autoPlay
+
   fun shouldAutoStop(): Boolean = _autoStop
 
   fun shouldResizeToViewport(): Boolean = _resizeToViewport
@@ -66,6 +74,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     if (isPerfMediaRemountInstrumentationFix) {
       if (overlayRes != other.overlayRes ||
           !Objects.equal(overlayDrawable, other.overlayDrawable) ||
+          !Objects.equal(backgroundDrawable, other.backgroundDrawable) ||
           !Objects.equal(actualImageColorFilter, other.actualImageColorFilter) ||
           _resizeToViewport != other._resizeToViewport ||
           _autoPlay != other._autoPlay ||
@@ -77,6 +86,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     } else {
       if (overlayRes != other.overlayRes ||
           !Objects.equal(overlayDrawable, other.overlayDrawable) ||
+          !Objects.equal(backgroundDrawable, other.backgroundDrawable) ||
           !Objects.equal(actualImageColorFilter, other.actualImageColorFilter) ||
           _resizeToViewport != other._resizeToViewport ||
           !Objects.equal(customDrawableFactory, other.customDrawableFactory)) {
@@ -98,12 +108,14 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
           !Objects.equal(placeholderScaleType, other.placeholderScaleType) ||
           !Objects.equal(placeholderFocusPoint, other.placeholderFocusPoint) ||
           placeholderApplyRoundingOptions != other.placeholderApplyRoundingOptions ||
+          errorColor != other.errorColor ||
           errorRes != other.errorRes ||
           !Objects.equal(errorScaleType, other.errorScaleType) ||
           !Objects.equal(errorFocusPoint, other.errorFocusPoint) ||
           errorApplyRoundingOptions != other.errorApplyRoundingOptions ||
           overlayRes != other.overlayRes ||
           !Objects.equal(overlayDrawable, other.overlayDrawable) ||
+          !Objects.equal(errorDrawable, other.errorDrawable) ||
           progressRes != other.progressRes ||
           !Objects.equal(progressDrawable, other.progressDrawable) ||
           !Objects.equal(progressScaleType, other.progressScaleType) ||
@@ -124,12 +136,14 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
           !Objects.equal(placeholderScaleType, other.placeholderScaleType) ||
           !Objects.equal(placeholderFocusPoint, other.placeholderFocusPoint) ||
           placeholderApplyRoundingOptions != other.placeholderApplyRoundingOptions ||
+          errorColor != other.errorColor ||
           errorRes != other.errorRes ||
           !Objects.equal(errorScaleType, other.errorScaleType) ||
           !Objects.equal(errorFocusPoint, other.errorFocusPoint) ||
           errorApplyRoundingOptions != other.errorApplyRoundingOptions ||
           overlayRes != other.overlayRes ||
           !Objects.equal(overlayDrawable, other.overlayDrawable) ||
+          !Objects.equal(errorDrawable, other.errorDrawable) ||
           progressRes != other.progressRes ||
           progressDrawable !== other.progressDrawable ||
           progressScaleType !== other.progressScaleType ||
@@ -154,6 +168,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     result = 31 * result + (placeholderScaleType?.hashCode() ?: 0)
     result = 31 * result + (placeholderFocusPoint?.hashCode() ?: 0)
     result = 31 * result + if (placeholderApplyRoundingOptions) 1 else 0
+    result = 31 * result + (errorColor ?: 0)
     result = 31 * result + errorRes
     result = 31 * result + (errorScaleType?.hashCode() ?: 0)
     result = 31 * result + (errorFocusPoint?.hashCode() ?: 0)
@@ -161,6 +176,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     result = 31 * result + if (errorApplyRoundingOptions) 1 else 0
     result = 31 * result + overlayRes
     result = 31 * result + (overlayDrawable?.hashCode() ?: 0)
+    result = 31 * result + (backgroundDrawable?.hashCode() ?: 0)
     result = 31 * result + (progressDrawable?.hashCode() ?: 0)
     result = 31 * result + (progressScaleType?.hashCode() ?: 0)
     result = 31 * result + (actualImageColorFilter?.hashCode() ?: 0)
@@ -187,6 +203,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
           .add("progressRes", progressRes)
           .add("progressDrawable", progressDrawable)
           .add("progressScaleType", progressScaleType)
+          .add("errorColor", errorColor)
           .add("errorRes", errorRes)
           .add("errorScaleType", errorScaleType)
           .add("errorFocusPoint", errorFocusPoint)
@@ -195,6 +212,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
           .add("actualImageColorFilter", actualImageColorFilter)
           .add("overlayRes", overlayRes)
           .add("overlayDrawable", overlayDrawable)
+          .add("backgroundDrawable", backgroundDrawable)
           .add("resizeToViewport", _resizeToViewport)
           .add("autoPlay", _autoPlay)
           .add("autoStop", _autoStop)
@@ -214,6 +232,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     internal var _progressDrawable: Drawable? = null
     internal var _progressScaleType: ScalingUtils.ScaleType? = null
 
+    @ColorInt internal var _errorColor: Int? = null
     @DrawableRes internal var _errorRes = 0
     internal var _errorScaleType: ScalingUtils.ScaleType? = null
     internal var _errorFocusPoint: PointF? = null
@@ -223,6 +242,9 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
 
     @DrawableRes internal var _overlayRes = 0
     internal var _overlayDrawable: Drawable? = null
+
+    internal var _backgroundDrawable: Drawable? = null
+
     internal var _resizeToViewport = false
     internal var _autoPlay = false
     internal var _autoStop = true
@@ -230,6 +252,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     internal var _fadeDurationMs = 0
     internal var _customDrawableFactory: ImageOptionsDrawableFactory? = null
     internal var _experimentalDynamicSize = false
+    internal var _experimentalDynamicSizeWithCacheFallback = false
 
     internal constructor() : super()
 
@@ -243,6 +266,7 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
       _progressRes = defaultOptions.progressRes
       _progressDrawable = defaultOptions.progressDrawable
       _progressScaleType = defaultOptions.progressScaleType
+      _errorColor = defaultOptions.errorColor
       _errorRes = defaultOptions.errorRes
       _errorScaleType = defaultOptions.errorScaleType
       _errorFocusPoint = defaultOptions.errorFocusPoint
@@ -252,9 +276,13 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
       _overlayRes = defaultOptions.overlayRes
       _overlayDrawable = defaultOptions.overlayDrawable
       _resizeToViewport = defaultOptions.shouldResizeToViewport()
+      _autoPlay = defaultOptions.shouldAutoPlay()
+      _autoStop = defaultOptions.shouldAutoStop()
       _fadeDurationMs = defaultOptions.fadeDurationMs
       _customDrawableFactory = defaultOptions.customDrawableFactory
       _experimentalDynamicSize = defaultOptions.experimentalDynamicSize
+      _experimentalDynamicSizeWithCacheFallback =
+          defaultOptions.experimentalDynamicSizeWithCacheFallback
     }
 
     fun placeholder(placeholder: Drawable?): Builder = modify {
@@ -308,7 +336,17 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
           _placeholderApplyRoundingOptions = placeholderApplyRoundingOptions
         }
 
-    fun errorRes(@DrawableRes errorRes: Int): Builder = modify { _errorRes = errorRes }
+    fun errorColor(@ColorInt errorColor: Int): Builder = modify {
+      _errorColor = errorColor
+      _errorRes = 0
+      _errorDrawable = null
+    }
+
+    fun errorRes(@DrawableRes errorRes: Int): Builder = modify {
+      _errorColor = null
+      _errorRes = errorRes
+      _errorDrawable = null
+    }
 
     fun errorScaleType(errorScaleType: ScalingUtils.ScaleType?): Builder = modify {
       _errorScaleType = errorScaleType
@@ -318,7 +356,11 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
       _errorFocusPoint = errorFocusPoint
     }
 
-    fun errorDrawable(errorDrawable: Drawable?): Builder = modify { _errorDrawable = errorDrawable }
+    fun errorDrawable(errorDrawable: Drawable?): Builder = modify {
+      _errorColor = null
+      _errorRes = 0
+      _errorDrawable = errorDrawable
+    }
 
     fun errorApplyRoundingOptions(errorApplyRoundingOptions: Boolean): Builder = modify {
       _errorApplyRoundingOptions = errorApplyRoundingOptions
@@ -355,6 +397,8 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
       _overlayDrawable = overlayDrawable
       _overlayRes = 0
     }
+
+    fun background(drawable: Drawable?): Builder = modify { _backgroundDrawable = drawable }
 
     fun colorFilter(colorFilter: ColorFilter?): Builder = modify {
       _actualImageColorFilter = colorFilter
@@ -410,6 +454,11 @@ class ImageOptions(builder: Builder) : DecodedImageOptions(builder) {
     fun experimentalDynamicSize(dynamicSize: Boolean): Builder = modify {
       _experimentalDynamicSize = dynamicSize
     }
+
+    fun experimentalDynamicSizeWithCacheFallback(dynamicSizeWithCacheFallback: Boolean): Builder =
+        modify {
+          _experimentalDynamicSizeWithCacheFallback = dynamicSizeWithCacheFallback
+        }
 
     override fun build(): ImageOptions = ImageOptions(this)
 

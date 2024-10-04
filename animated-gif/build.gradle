@@ -6,9 +6,16 @@
  */
 
 import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
 import com.facebook.fresco.buildsrc.TestDeps
 
 apply plugin: 'com.android.library'
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(11))
+    }
+}
 
 dependencies {
     compileOnly Deps.inferAnnotation
@@ -22,6 +29,7 @@ dependencies {
     testCompileOnly Deps.inferAnnotation
     testImplementation project(':imagepipeline-base-test')
     testImplementation project(':imagepipeline-test')
+    testImplementation project(':middleware')
     testImplementation TestDeps.junit
     testImplementation TestDeps.mockitoCore
     testImplementation(TestDeps.Powermock.apiMockito) {
@@ -42,10 +50,14 @@ task fetchNativeDeps(dependsOn: [copyGiflib]) {
 }
 
 android {
+    ndkVersion GradleDeps.Native.version
+
     def ndkLibs = [['gifimage', [copyGiflib]]]
 
     buildToolsVersion FrescoConfig.buildToolsVersion
     compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.animated.gif"
 
     defaultConfig {
         minSdkVersion FrescoConfig.minSdkVersion
@@ -59,6 +71,7 @@ android {
         }
     }
     ndkLibs.each { lib -> makeNdkTasks lib[0], lib[1] }
+    preBuild.dependsOn("ndk_build_gifimage")
 }
 
 apply plugin: "com.vanniktech.maven.publish"

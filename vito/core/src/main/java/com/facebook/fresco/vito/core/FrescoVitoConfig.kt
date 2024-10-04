@@ -29,4 +29,18 @@ interface FrescoVitoConfig {
   fun onlyStopAnimationWhenAutoPlayEnabled(): Boolean
 
   fun fastPathForEmptyRequests(): Boolean
+
+  fun enableWindowWideColorGamut(): Boolean
+
+  fun handleImageResultInBackground(): Boolean
+
+  fun useIntermediateImagesAsPlaceholder(): Boolean
+
+  fun fallbackToDefaultImageOptions(): Boolean
+
+  fun experimentalDynamicSizeVito2(): Boolean
+
+  fun experimentalDynamicSizeWithCacheFallbackVito2(): Boolean
+
+  fun experimentalDynamicSizeOnPrepareMainThreadVito2(): Boolean
 }

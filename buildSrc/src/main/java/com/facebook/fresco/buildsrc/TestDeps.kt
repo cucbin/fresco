@@ -8,17 +8,18 @@
 package com.facebook.fresco.buildsrc
 
 object TestDeps {
-  const val assertjCore = "org.assertj:assertj-core:2.9.0"
+  const val assertjCore = "org.assertj:assertj-core:2.9.1"
 
   const val junit = "junit:junit:4.12"
 
   const val mockitoCore = "org.mockito:mockito-core:2.28.2"
 
   const val mockitoInline = "org.mockito:mockito-inline:2.28.2"
+  const val mockitoKotlin = "org.mockito.kotlin:mockito-kotlin:2.2.11"
 
   const val festAssertCore = "org.easytesting:fest-assert-core:2.0M10"
 
-  const val robolectric = "org.robolectric:robolectric:4.4"
+  const val robolectric = "org.robolectric:robolectric:4.12.2"
 
   const val truth = "com.google.truth:truth:1.0.1"
 
@@ -29,7 +30,7 @@ object TestDeps {
   }
 
   object Powermock {
-    private const val version = "2.0.2"
+    private const val version = "2.0.9"
 
     const val apiMockito = "org.powermock:powermock-api-mockito2:$version"
     const val moduleJunit4 = "org.powermock:powermock-module-junit4:$version"

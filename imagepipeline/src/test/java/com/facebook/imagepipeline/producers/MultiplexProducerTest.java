@@ -26,6 +26,7 @@ import com.facebook.imagepipeline.common.Priority;
 import com.facebook.imagepipeline.core.ImagePipelineConfig;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.request.ImageRequest;
+import javax.annotation.Nullable;
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
@@ -66,7 +67,7 @@ public class MultiplexProducerTest {
   private Consumer<CloseableReference<CloseableImage>> mConsumer1;
   private Consumer<CloseableReference<CloseableImage>> mConsumer2;
   private Consumer<CloseableReference<CloseableImage>> mConsumer3;
-  private Consumer<CloseableReference<CloseableImage>> mForwardingConsumer1;
+  @Nullable private Consumer<CloseableReference<CloseableImage>> mForwardingConsumer1;
   private Consumer<CloseableReference<CloseableImage>> mForwardingConsumer2;
   private BaseProducerContext mMultiplexedContext1;
   private BaseProducerContext mMultiplexedContext2;
@@ -141,6 +142,7 @@ public class MultiplexProducerTest {
 
     doAnswer(
             new Answer() {
+              @Nullable
               @Override
               public Void answer(InvocationOnMock invocation) throws Throwable {
                 if (mForwardingConsumer1 == null) {

@@ -6,11 +6,16 @@
  */
 
 import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
 import com.facebook.fresco.buildsrc.TestDeps
 
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
+
+kotlin {
+    jvmToolchain(11)
+}
 
 dependencies {
     compileOnly Deps.inferAnnotation
@@ -26,6 +31,7 @@ dependencies {
 
     implementation project(':drawee')
     implementation project(':fbcore')
+    implementation project(':middleware')
     implementation project(':ui-common')
     implementation project(':vito:core')
     implementation project(':vito:options')
@@ -43,11 +49,15 @@ dependencies {
 }
 
 android {
+    ndkVersion GradleDeps.Native.version
+
     buildToolsVersion FrescoConfig.buildToolsVersion
     compileSdkVersion FrescoConfig.compileSdkVersion
 
+    namespace "com.facebook.fresco.vito.litho"
+
     defaultConfig {
-        minSdkVersion FrescoConfig.minSdkVersion
+        minSdkVersion FrescoConfig.vitoLithoMinSdkVersion
         targetSdkVersion FrescoConfig.targetSdkVersion
     }
 

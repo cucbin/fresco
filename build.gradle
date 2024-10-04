@@ -21,21 +21,21 @@ buildscript {
         classpath GradleDeps.Android.gradlePlugin
         classpath GradleDeps.Kotlin.gradlePlugin
 
-        classpath GradleDeps.Publishing.gradleMavenPublishPlugin
-        classpath GradleDeps.Kotlin.gradlePlugin
-
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
 }
 
 plugins {
-    id "de.undercouch.download" version "3.1.2"
+    id "de.undercouch.download" version "5.3.1"
+    id "com.vanniktech.maven.publish" version "0.25.3"
 }
 
-project.ext {
-    preDexLibs = !project.hasProperty('disablePreDex')
-}
+// Make sure to add trailing slash to the absolute paths
+LinkedHashMap<String, String> commonNdkLocations = [
+        "macOS-internal":"/opt/android_sdk/ndk/",
+        "linux-ubuntu":"/usr/local/lib/android/sdk/ndk/",
+]
 
 subprojects {
 
@@ -50,6 +50,24 @@ subprojects {
         enabled = false
     }
 
+    tasks.withType(com.android.build.gradle.tasks.JavaDocGenerationTask).all {
+        enabled = false
+    }
+
+
+    if (System.getenv("SANDCASTLE") == "1") {
+        tasks.withType(Test).all {
+            systemProperty("robolectric.dependency.repo.id", "central")
+            systemProperty("robolectric.dependency.repo.url", "https://maven.thefacebook.com/nexus/content/repositories/central/")
+            systemProperty("robolectric.logging", "stdout")
+            systemProperty("robolectric.logging.enabled", "true")
+            systemProperty("java.net.preferIPv6Addresses", "true")
+            systemProperty("java.net.preferIPv4Stack", "false")
+            systemProperty("jdk.attach.allowAttachSelf", "true")
+            jvmArgs '-XX:+StartAttachListener'
+        }
+    }
+
     configurations.all {
         resolutionStrategy.force Deps.jsr305
     }
@@ -57,11 +75,15 @@ subprojects {
     task allclean {
     }
 
-    project.plugins.whenPluginAdded { plugin ->
-        if ("com.android.build.gradle.AppPlugin".equals(plugin.class.name)) {
-            project.android.dexOptions.preDexLibraries = rootProject.ext.preDexLibs
-        } else if ("com.android.build.gradle.LibraryPlugin".equals(plugin.class.name)) {
-            project.android.dexOptions.preDexLibraries = rootProject.ext.preDexLibs
+    // Sets the ndkPath for each module when running on CI
+    if (System.getenv("SANDCASTLE") == "1") {
+        String ndkDir = System.getenv("ANDROID_NDK_HOME")
+        project.plugins.whenPluginAdded { plugin ->
+            if ("com.android.build.gradle.AppPlugin" == plugin.class.name) {
+                project.android.ndkPath = ndkDir
+            } else if ("com.android.build.gradle.LibraryPlugin" == plugin.class.name) {
+                project.android.ndkPath = ndkDir
+            }
         }
     }
 
@@ -105,27 +127,71 @@ subprojects {
         }
     }
 
-    ext.getNdkBuildFullPath = { Project project ->
-        File propFile = project.rootProject.file('local.properties')
-        if (!propFile.exists()) {
-            return getNdkBuildName()
-        }
-        Properties properties = new Properties()
-        properties.load(propFile.newDataInputStream())
-        def ndkCommand = properties.getProperty('ndk.command')
-        if (ndkCommand != null) {
-            return ndkCommand
-        }
-        def path = null
-        def ndkPath = properties.getProperty('ndk.path')
-        if (ndkPath != null) {
-            path = ndkPath
-        } else {
-            def ndkDir = properties.getProperty('ndk.dir')
-            if (ndkDir != null) {
-                path = ndkDir
+    ext.discoverNdkPathFromCommonLocations = { String ndkVersion ->
+        String foundNdkLocation = null
+        for (entry in commonNdkLocations) {
+            String variant = entry.key
+            String location = entry.value
+
+            String ndkDir = location + ndkVersion
+            File ndkFolder = new File(ndkDir)
+            if (ndkFolder.exists()) {
+                println("NDK Path found using: common $variant location")
+                foundNdkLocation = ndkDir
+                break
             }
         }
+
+        return foundNdkLocation
+    }
+
+    ext.getNdkBuildFullPath = { Project project ->
+        String path = null
+
+        // Latest method using the common NDK version used throughout the project and using the standard NDK SxS location on macOS
+        if (path == null) {
+            path = discoverNdkPathFromCommonLocations(GradleDeps.Native.version)
+        }
+
+        // Fallback method for CI
+        if (path == null) {
+            String ndkDir = System.getenv("ANDROID_NDK_HOME")
+            if (ndkDir != null) {
+                File ndkFolder = new File(ndkDir)
+                if (ndkFolder.exists()) {
+                    path = ndkDir
+                    println("NDK Path found using: ANDROID_NDK_HOME")
+                }
+            }
+        }
+
+        // Legacy methods of finding NDK path
+        if (path == null) {
+            File propFile = project.rootProject.file('local.properties')
+            if (!propFile.exists()) {
+                println("NDK Path found using: local.props missing, just the command name")
+                return getNdkBuildName()
+            }
+            Properties properties = new Properties()
+            properties.load(propFile.newDataInputStream())
+            def ndkCommand = properties.getProperty('ndk.command')
+            if (ndkCommand != null) {
+                println("NDK Path found using: ndk.command")
+                return ndkCommand
+            }
+            def ndkPath = properties.getProperty('ndk.path')
+            if (ndkPath != null) {
+                println("NDK Path found using: ndk.path")
+                path = ndkPath
+            } else {
+                def ndkDir = properties.getProperty('ndk.dir')
+                if (ndkDir != null) {
+                    println("NDK Path found using: ndk.dir")
+                    path = ndkDir
+                }
+            }
+        }
+
         if (path != null) {
             if (!path.endsWith(File.separator)) {
                 path += File.separator
@@ -230,7 +296,7 @@ subprojects {
             "v${LIBWEBP_VERSION}.tar.gz", // The downloaded file
             'libwebp', // The folder where the file is downloaded
             "libwebp-${LIBWEBP_VERSION}", // The first dir where we have put our customisation
-            ['src/**/*.c', 'src/**/*.h', '*.mk'], // Files to compile
+            ['**/*.c', '**/*.h', '*.mk'], // Files to compile
             "libwebp-${LIBWEBP_VERSION}" // Final destination dir
     )
 }

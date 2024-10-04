@@ -15,6 +15,7 @@ import com.facebook.fresco.vito.core.VitoImageRequest
 import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.fresco.vito.source.ImageSource
 import com.facebook.fresco.vito.source.ImageSourceProvider
+import kotlin.Unit
 
 class ImageLiveEditor(
     val drawable: FrescoDrawableInterface,
@@ -48,7 +49,13 @@ class ImageLiveEditor(
 
   fun fetch(request: VitoImageRequest) {
     frescoController.fetch(
-        drawable, request, drawable.callerContext, null, drawable.imageListener, null, null)
+        drawable = drawable,
+        imageRequest = request,
+        callerContext = drawable.callerContext,
+        contextChain = null,
+        listener = drawable.imageListener,
+        onFadeListener = null,
+        viewportDimensions = null)
   }
 
   fun getOptions(): ImageOptions = drawable.imageRequest?.imageOptions ?: ImageOptions.defaults()
@@ -59,5 +66,5 @@ class ImageLiveEditor(
   fun getOriginalSource(): ImageSource =
       originalRequest?.imageSource ?: ImageSourceProvider.emptySource()
 
-  fun reset() = originalRequest?.let(::fetch)
+  fun reset(): Unit? = originalRequest?.let(::fetch)
 }

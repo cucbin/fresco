@@ -12,12 +12,18 @@ import android.os.Looper
 import com.facebook.drawee.components.DeferredReleaser
 
 object ImageReleaseScheduler {
-  private const val RELEASE_DELAY: Long = 16 * 5 // Roughly 5 frames.
+  var releaseDelayMs: Long = 16 * 5 // Roughly 5 frames.
+
+  var improveDelayedReleasing = false
+  var enableReleaseDelayed = true
+  var enableReleaseNextFrame = true
+  var enableReleaseImmediately = true
 
   class ImageReleaseState(val drawable: KFrescoVitoDrawable) :
       Runnable, DeferredReleaser.Releasable {
 
     var delayedReleasePending = false
+
     override fun run() {
       // the Runnable interface is used to release next frame
       releaseNextFrame(drawable)
@@ -33,19 +39,28 @@ object ImageReleaseScheduler {
   private val deferredReleaser = DeferredReleaser.getInstance()
 
   fun releaseImmediately(drawable: KFrescoVitoDrawable) {
+    if (!enableReleaseImmediately) {
+      return
+    }
     drawable.imagePerfListener.onReleaseImmediately(drawable)
     drawable.reset()
   }
 
   fun releaseDelayed(drawable: KFrescoVitoDrawable) {
-    if (drawable.releaseState.delayedReleasePending) {
+    if (!enableReleaseDelayed || drawable.releaseState.delayedReleasePending) {
       return
     }
     drawable.imagePerfListener.onScheduleReleaseDelayed(drawable)
-    handler.postDelayed(drawable.releaseState, RELEASE_DELAY)
+    handler.postDelayed(drawable.releaseState, releaseDelayMs)
+    if (improveDelayedReleasing) {
+      drawable.releaseState.delayedReleasePending = true
+    }
   }
 
   fun releaseNextFrame(drawable: KFrescoVitoDrawable) {
+    if (!enableReleaseNextFrame) {
+      return
+    }
     cancelReleaseDelayed(drawable)
     drawable.imagePerfListener.onScheduleReleaseNextFrame(drawable)
     deferredReleaser.scheduleDeferredRelease(drawable.releaseState)
@@ -57,7 +72,9 @@ object ImageReleaseScheduler {
   }
 
   fun cancelReleaseDelayed(drawable: KFrescoVitoDrawable) {
-    handler.removeCallbacks(drawable.releaseState)
+    if (!improveDelayedReleasing || drawable.releaseState.delayedReleasePending) {
+      handler.removeCallbacks(drawable.releaseState)
+    }
     drawable.releaseState.delayedReleasePending = false
   }
 

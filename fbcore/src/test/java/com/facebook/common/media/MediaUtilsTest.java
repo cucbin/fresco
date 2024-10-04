@@ -7,7 +7,7 @@
 
 package com.facebook.common.media;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import android.webkit.MimeTypeMap;
 import org.junit.Test;
@@ -58,7 +58,7 @@ public class MediaUtilsTest {
   @Test
   public void testExtractMimeNativelySupportedFileExtension() {
     ShadowMimeTypeMap mimeTypeMap = Shadows.shadowOf(MimeTypeMap.getSingleton());
-    mimeTypeMap.addExtensionMimeTypMapping("jpg", "image/jpg");
+    mimeTypeMap.addExtensionMimeTypeMapping("jpg", "image/jpg");
 
     String path = "file/with/natively/supported/extension.jpg";
     assertThat(MediaUtils.extractMime(path)).isEqualTo("image/jpg");

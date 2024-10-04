@@ -42,7 +42,7 @@ public class ImageDecoderConfig {
     return new Builder();
   }
 
-  public static class Builder {
+  public static final class Builder {
     @Nullable private Map<ImageFormat, ImageDecoder> mCustomImageDecoders;
     @Nullable private List<ImageFormat.FormatChecker> mCustomImageFormats;
 
@@ -57,12 +57,14 @@ public class ImageDecoderConfig {
     public Builder addDecodingCapability(
         ImageFormat imageFormat,
         ImageFormat.FormatChecker imageFormatChecker,
-        ImageDecoder decoder) {
+        @Nullable ImageDecoder decoder) {
       if (mCustomImageFormats == null) {
         mCustomImageFormats = new ArrayList<>();
       }
       mCustomImageFormats.add(imageFormatChecker);
-      overrideDecoder(imageFormat, decoder);
+      if (decoder != null) {
+        overrideDecoder(imageFormat, decoder);
+      }
       return this;
     }
 

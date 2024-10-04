@@ -109,6 +109,7 @@ class BitmapAnimationBackend(
   private var pathFrameNumber: Int = -1
 
   private var frameListener: FrameListener? = null
+  private var animationListener: AnimationBackend.Listener? = null
 
   init {
     updateBitmapDimensions()
@@ -122,6 +123,12 @@ class BitmapAnimationBackend(
 
   override fun getFrameDurationMs(frameNumber: Int): Int =
       animationInformation.getFrameDurationMs(frameNumber)
+
+  override fun width(): Int = animationInformation.width()
+
+  override fun height(): Int = animationInformation.height()
+
+  override fun getLoopDurationMs(): Int = animationInformation.loopDurationMs
 
   override fun getLoopCount(): Int = animationInformation.loopCount
 
@@ -151,25 +158,21 @@ class BitmapAnimationBackend(
     val drawn: Boolean
     var nextFrameType = FRAME_TYPE_UNKNOWN
 
-    if (isNewRenderImplementation) {
-      bitmapReference = getFrame(frameNumber)
-
-      // If frame is missing, we find the previous nearest and request to load the frames
-      if (bitmapReference == null || !bitmapReference.isValid) {
-        bitmapReference = bitmapFramePreparationStrategy?.findNearestFrame(frameNumber, frameCount)
-        bitmapFramePreparationStrategy?.prepareFrames(
-            frameCount, canvas.width, canvas.height, intrinsicWidth, intrinsicHeight)
-      }
-
-      if (bitmapReference != null && bitmapReference.isValid) {
-        drawBitmap(frameNumber, bitmapReference.get(), canvas)
-        return true
-      }
-
-      return false
-    }
-
     try {
+      if (isNewRenderImplementation) {
+        bitmapReference =
+            bitmapFramePreparationStrategy?.getBitmapFrame(frameNumber, canvas.width, canvas.height)
+
+        if (bitmapReference != null && bitmapReference.isValid) {
+          drawBitmap(frameNumber, bitmapReference.get(), canvas)
+          return true
+        }
+
+        // If bitmap couldnt be drawn, then fetch frames
+        bitmapFramePreparationStrategy?.prepareFrames(canvas.width, canvas.height, null)
+        return false
+      }
+
       when (frameType) {
         FRAME_TYPE_CACHED -> {
           bitmapReference = bitmapFrameCache.getCachedFrame(frameNumber)
@@ -217,11 +220,6 @@ class BitmapAnimationBackend(
     }
   }
 
-  private fun getFrame(frameToRender: Int): CloseableReference<Bitmap>? {
-    val cache = bitmapFrameCache.getCachedFrame(frameToRender)
-    return if (cache?.isValid == true) cache else null
-  }
-
   override fun setAlpha(@IntRange(from = 0, to = 255) alpha: Int) {
     paint.alpha = alpha
   }
@@ -250,12 +248,30 @@ class BitmapAnimationBackend(
     }
   }
 
+  override fun preloadAnimation() {
+    if (!isNewRenderImplementation && bitmapFramePreparer != null) {
+      bitmapFramePreparationStrategy?.prepareFrames(
+          bitmapFramePreparer, bitmapFrameCache, this, 0) {
+            animationListener?.onAnimationLoaded()
+          }
+    } else {
+      bitmapFramePreparationStrategy?.prepareFrames(
+          animationInformation.width(), animationInformation.height()) {
+            animationListener?.onAnimationLoaded()
+          }
+    }
+  }
+
   override fun onInactive() {
     if (isNewRenderImplementation) {
       bitmapFramePreparationStrategy?.onStop()
     } else {
       clear()
     }
+  }
+
+  override fun setAnimationListener(listener: AnimationBackend.Listener?) {
+    animationListener = listener
   }
 
   private fun updateBitmapDimensions() {
@@ -370,7 +386,7 @@ class BitmapAnimationBackend(
   }
 
   companion object {
-    const val FRAME_TYPE_UNKNOWN = -1
+    const val FRAME_TYPE_UNKNOWN: Int = -1
     const val FRAME_TYPE_CACHED = 0
     const val FRAME_TYPE_REUSED = 1
     const val FRAME_TYPE_CREATED = 2

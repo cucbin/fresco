@@ -20,7 +20,7 @@ import com.facebook.drawee.gestures.GestureDetector;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.interfaces.SimpleDraweeControllerBuilder;
 import com.facebook.fresco.ui.common.ControllerListener2;
-import com.facebook.fresco.ui.common.LoggingListener;
+import com.facebook.fresco.ui.common.LegacyOnFadeListener;
 import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.infer.annotation.ReturnsOwnership;
@@ -54,8 +54,8 @@ public abstract class AbstractDraweeControllerBuilder<
 
   // components
   private final Context mContext;
-  private final Set<ControllerListener> mBoundControllerListeners;
-  private final Set<ControllerListener2> mBoundControllerListeners2;
+  @Nullable private final Set<ControllerListener> mBoundControllerListeners;
+  @Nullable private final Set<ControllerListener2> mBoundControllerListeners2;
 
   // builder parameters
   private @Nullable Object mCallerContext;
@@ -65,11 +65,12 @@ public abstract class AbstractDraweeControllerBuilder<
   private boolean mTryCacheOnlyFirst;
   private @Nullable Supplier<DataSource<IMAGE>> mDataSourceSupplier;
   private @Nullable ControllerListener<? super INFO> mControllerListener;
-  private @Nullable LoggingListener mLoggingListener;
+  private @Nullable LegacyOnFadeListener mLegacyOnFadeListener;
   private @Nullable ControllerViewportVisibilityListener mControllerViewportVisibilityListener;
   private boolean mTapToRetryEnabled;
   private boolean mAutoPlayAnimations;
   private boolean mRetainImageOnFailure;
+  private boolean mLogWithHighSamplingRate = false;
   @Nullable private String mContentDescription;
   // old controller to reuse
   private @Nullable DraweeController mOldController;
@@ -94,10 +95,11 @@ public abstract class AbstractDraweeControllerBuilder<
     mMultiImageRequests = null;
     mTryCacheOnlyFirst = true;
     mControllerListener = null;
-    mLoggingListener = null;
+    mLegacyOnFadeListener = null;
     mControllerViewportVisibilityListener = null;
     mTapToRetryEnabled = false;
     mAutoPlayAnimations = false;
+    mLogWithHighSamplingRate = false;
     mOldController = null;
     mContentDescription = null;
   }
@@ -239,6 +241,15 @@ public abstract class AbstractDraweeControllerBuilder<
     return mAutoPlayAnimations;
   }
 
+  public boolean isLogWithHighSamplingRate() {
+    return mLogWithHighSamplingRate;
+  }
+
+  public BUILDER setLogWithHighSamplingRate(boolean logWithHighSamplingRate) {
+    mLogWithHighSamplingRate = logWithHighSamplingRate;
+    return getThis();
+  }
+
   /** Sets the controller listener. */
   public BUILDER setControllerListener(
       @Nullable ControllerListener<? super INFO> controllerListener) {
@@ -246,14 +257,14 @@ public abstract class AbstractDraweeControllerBuilder<
     return getThis();
   }
 
-  public BUILDER setLoggingListener(@Nullable LoggingListener loggingListener) {
-    mLoggingListener = loggingListener;
+  public BUILDER setLoggingListener(@Nullable LegacyOnFadeListener legacyOnFadeListener) {
+    mLegacyOnFadeListener = legacyOnFadeListener;
     return getThis();
   }
 
   @Nullable
-  public LoggingListener getLoggingListener() {
-    return mLoggingListener;
+  public LegacyOnFadeListener getLoggingListener() {
+    return mLegacyOnFadeListener;
   }
 
   /** Gets the controller listener */
@@ -333,6 +344,7 @@ public abstract class AbstractDraweeControllerBuilder<
       FrescoSystrace.beginSection("AbstractDraweeControllerBuilder#buildController");
     }
     AbstractDraweeController controller = obtainController();
+    controller.setLogWithHighSamplingRate(isLogWithHighSamplingRate());
     controller.setRetainImageOnFailure(getRetainImageOnFailure());
     controller.setContentDescription(getContentDescription());
     controller.setControllerViewportVisibilityListener(getControllerViewportVisibilityListener());

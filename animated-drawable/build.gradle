@@ -6,14 +6,23 @@
  */
 
 import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
 import com.facebook.fresco.buildsrc.TestDeps
 
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
+kotlin {
+    jvmToolchain(11)
+}
+
 android {
+    ndkVersion GradleDeps.Native.version
+
     buildToolsVersion FrescoConfig.buildToolsVersion
     compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.animated.drawable"
 
     defaultConfig {
         minSdkVersion FrescoConfig.minSdkVersion
@@ -37,6 +46,7 @@ dependencies {
     testCompileOnly Deps.inferAnnotation
     testImplementation Deps.AndroidX.androidxAnnotation
     testImplementation Deps.jsr305
+    testImplementation TestDeps.assertjCore
     testImplementation TestDeps.junit
     testImplementation TestDeps.festAssertCore
     testImplementation TestDeps.mockitoCore
@@ -51,11 +61,14 @@ dependencies {
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
     testImplementation project(':imagepipeline-test')
+    testImplementation project(':imagepipeline-base-test')
+
 
     implementation project(':imagepipeline-base')
     implementation project(':drawee')
     implementation project(':fbcore')
     implementation project(':vito:renderer')
+    implementation project(':vito:options')
 }
 
 apply plugin: "com.vanniktech.maven.publish"

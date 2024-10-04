@@ -11,9 +11,10 @@ import com.facebook.common.time.MonotonicClock;
 import com.facebook.infer.annotation.Nullsafe;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /** */
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class FakeClock implements MonotonicClock {
 
   public interface OnTickListener {
@@ -78,6 +79,11 @@ public class FakeClock implements MonotonicClock {
   @Override
   public synchronized long now() {
     return now;
+  }
+
+  @Override
+  public long nowNanos() {
+    return TimeUnit.MILLISECONDS.toNanos(now());
   }
 
   /**

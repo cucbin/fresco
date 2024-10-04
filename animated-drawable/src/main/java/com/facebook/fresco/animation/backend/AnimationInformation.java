@@ -7,7 +7,10 @@
 
 package com.facebook.fresco.animation.backend;
 
+import com.facebook.infer.annotation.Nullsafe;
+
 /** Basic animation metadata: Frame and loop count & duration */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface AnimationInformation {
 
   /**
@@ -30,6 +33,23 @@ public interface AnimationInformation {
    * @return the duration in ms
    */
   int getFrameDurationMs(int frameNumber);
+
+  /**
+   * Loop duration in ms
+   *
+   * @return duration in ms
+   */
+  int getLoopDurationMs();
+
+  /**
+   * @return Animation asset width
+   */
+  int width();
+
+  /**
+   * @return Animation asset height
+   */
+  int height();
 
   /**
    * Get the number of loops the animation has or {@link #LOOP_COUNT_INFINITE} for infinite looping.

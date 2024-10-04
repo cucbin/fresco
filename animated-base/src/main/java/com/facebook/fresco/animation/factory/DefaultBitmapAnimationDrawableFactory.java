@@ -18,23 +18,25 @@ import com.facebook.common.internal.Suppliers;
 import com.facebook.common.time.MonotonicClock;
 import com.facebook.fresco.animation.backend.AnimationBackend;
 import com.facebook.fresco.animation.backend.AnimationBackendDelegateWithInactivityCheck;
+import com.facebook.fresco.animation.backend.AnimationInformation;
 import com.facebook.fresco.animation.bitmap.BitmapAnimationBackend;
 import com.facebook.fresco.animation.bitmap.BitmapFrameCache;
 import com.facebook.fresco.animation.bitmap.BitmapFrameRenderer;
 import com.facebook.fresco.animation.bitmap.cache.AnimationFrameCacheKey;
 import com.facebook.fresco.animation.bitmap.cache.FrescoFrameCache;
-import com.facebook.fresco.animation.bitmap.cache.FrescoFrameCache2;
 import com.facebook.fresco.animation.bitmap.cache.KeepLastFrameCache;
 import com.facebook.fresco.animation.bitmap.cache.NoOpCache;
 import com.facebook.fresco.animation.bitmap.preparation.BitmapFramePreparationStrategy;
 import com.facebook.fresco.animation.bitmap.preparation.BitmapFramePreparer;
 import com.facebook.fresco.animation.bitmap.preparation.DefaultBitmapFramePreparer;
-import com.facebook.fresco.animation.bitmap.preparation.DefaultLoadAnimationStrategy;
 import com.facebook.fresco.animation.bitmap.preparation.FixedNumberBitmapFramePreparationStrategy;
+import com.facebook.fresco.animation.bitmap.preparation.FrameLoaderStrategy;
+import com.facebook.fresco.animation.bitmap.preparation.ondemandanimation.FrameLoaderFactory;
 import com.facebook.fresco.animation.bitmap.wrapper.AnimatedDrawableBackendAnimationInformation;
 import com.facebook.fresco.animation.bitmap.wrapper.AnimatedDrawableBackendFrameRenderer;
 import com.facebook.fresco.animation.drawable.AnimatedDrawable2;
 import com.facebook.fresco.animation.drawable.KAnimatedDrawable2;
+import com.facebook.fresco.middleware.HasExtraData;
 import com.facebook.fresco.vito.options.ImageOptions;
 import com.facebook.fresco.vito.options.ImageOptionsDrawableFactory;
 import com.facebook.fresco.vito.options.RoundingOptions;
@@ -44,14 +46,12 @@ import com.facebook.imagepipeline.animated.base.AnimatedImageResult;
 import com.facebook.imagepipeline.animated.impl.AnimatedDrawableBackendProvider;
 import com.facebook.imagepipeline.animated.impl.AnimatedFrameCache;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
-import com.facebook.imagepipeline.cache.AnimatedCache;
 import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.imagepipeline.image.CloseableAnimatedImage;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
@@ -68,6 +68,7 @@ public class DefaultBitmapAnimationDrawableFactory
   private final AnimatedDrawableBackendProvider mAnimatedDrawableBackendProvider;
   private final ScheduledExecutorService mScheduledExecutorServiceForUiThread;
   private final ExecutorService mExecutorServiceForFramePreparing;
+
   private final MonotonicClock mMonotonicClock;
   private final PlatformBitmapFactory mPlatformBitmapFactory;
   private final CountingMemoryCache<CacheKey, CloseableImage> mBackingCache;
@@ -75,11 +76,12 @@ public class DefaultBitmapAnimationDrawableFactory
   private final Supplier<Integer> mNumberOfFramesToPrepareSupplier;
   private final Supplier<Boolean> mUseDeepEqualsForCacheKey;
   private final Supplier<Boolean> mUseNewBitmapRender;
-  private final Supplier<AnimatedCache> mAnimatedDrawableCache;
+  private final Supplier<Boolean> mDownscaleFrameToDrawableDimensions;
+  private final Supplier<Integer> mAnimationFpsLimit;
+  private final Supplier<Integer> mBufferLengthMilliseconds;
 
   // Change the value to true to use KAnimatedDrawable2.kt
   private final Supplier<Boolean> useRendererAnimatedDrawable = Suppliers.BOOLEAN_FALSE;
-  private final ExecutorService singleExecutor = Executors.newFixedThreadPool(5);
 
   public DefaultBitmapAnimationDrawableFactory(
       AnimatedDrawableBackendProvider animatedDrawableBackendProvider,
@@ -88,11 +90,13 @@ public class DefaultBitmapAnimationDrawableFactory
       MonotonicClock monotonicClock,
       PlatformBitmapFactory platformBitmapFactory,
       CountingMemoryCache<CacheKey, CloseableImage> backingCache,
-      Supplier<AnimatedCache> animatedDrawableCache,
       Supplier<Integer> cachingStrategySupplier,
       Supplier<Integer> numberOfFramesToPrepareSupplier,
       Supplier<Boolean> useDeepEqualsForCacheKey,
-      Supplier<Boolean> useNewBitmapRender) {
+      Supplier<Boolean> useNewBitmapRender,
+      Supplier<Boolean> downscaleFrameToDrawableDimensions,
+      Supplier<Integer> animationFpsLimit,
+      Supplier<Integer> bufferLengthMilliseconds) {
     mAnimatedDrawableBackendProvider = animatedDrawableBackendProvider;
     mScheduledExecutorServiceForUiThread = scheduledExecutorServiceForUiThread;
     mExecutorServiceForFramePreparing = executorServiceForFramePreparing;
@@ -103,7 +107,9 @@ public class DefaultBitmapAnimationDrawableFactory
     mNumberOfFramesToPrepareSupplier = numberOfFramesToPrepareSupplier;
     mUseDeepEqualsForCacheKey = useDeepEqualsForCacheKey;
     mUseNewBitmapRender = useNewBitmapRender;
-    mAnimatedDrawableCache = animatedDrawableCache;
+    mAnimationFpsLimit = animationFpsLimit;
+    mDownscaleFrameToDrawableDimensions = downscaleFrameToDrawableDimensions;
+    mBufferLengthMilliseconds = bufferLengthMilliseconds;
   }
 
   @Override
@@ -132,11 +138,21 @@ public class DefaultBitmapAnimationDrawableFactory
       Resources resources, CloseableImage closeableImage, ImageOptions imageOptions) {
     CloseableAnimatedImage closeable = ((CloseableAnimatedImage) closeableImage);
     AnimatedImage animatedImage = closeable.getImage();
-    AnimationBackend animationBackend =
-        createAnimationBackend(
-            Preconditions.checkNotNull(closeable.getImageResult()),
-            animatedImage != null ? animatedImage.getAnimatedBitmapConfig() : null,
-            imageOptions);
+    AnimationBackend animationBackend = null;
+    try {
+      animationBackend =
+          createAnimationBackend(
+              Preconditions.checkNotNull(closeable.getImageResult()),
+              animatedImage != null ? animatedImage.getAnimatedBitmapConfig() : null,
+              imageOptions);
+    } catch (NullPointerException e) {
+      Object uri = closeableImage.getExtra(HasExtraData.KEY_URI_SOURCE);
+      if (uri != null) {
+        throw new NullPointerException(e.getMessage() + " uri=" + uri.toString());
+      } else {
+        throw e;
+      }
+    }
     if (useRendererAnimatedDrawable.get()) {
       return new KAnimatedDrawable2(animationBackend);
     } else {
@@ -150,6 +166,8 @@ public class DefaultBitmapAnimationDrawableFactory
       @Nullable ImageOptions imageOptions) {
     AnimatedDrawableBackend animatedDrawableBackend =
         createAnimatedDrawableBackend(animatedImageResult);
+    AnimationInformation animationInfo =
+        new AnimatedDrawableBackendAnimationInformation(animatedDrawableBackend);
 
     BitmapFrameCache bitmapFrameCache = createBitmapFrameCache(animatedImageResult);
     BitmapFrameRenderer bitmapFrameRenderer =
@@ -172,19 +190,22 @@ public class DefaultBitmapAnimationDrawableFactory
 
     if (mUseNewBitmapRender.get()) {
       bitmapFramePreparationStrategy =
-          new DefaultLoadAnimationStrategy(
-              singleExecutor,
-              mExecutorServiceForFramePreparing,
+          new FrameLoaderStrategy(
+              animatedImageResult.getSource(),
+              animationInfo,
               bitmapFrameRenderer,
-              mPlatformBitmapFactory,
-              bitmapFrameCache);
+              new FrameLoaderFactory(
+                  mPlatformBitmapFactory,
+                  mAnimationFpsLimit.get(),
+                  mBufferLengthMilliseconds.get()),
+              mDownscaleFrameToDrawableDimensions.get());
     }
 
     BitmapAnimationBackend bitmapAnimationBackend =
         new BitmapAnimationBackend(
             mPlatformBitmapFactory,
             bitmapFrameCache,
-            new AnimatedDrawableBackendAnimationInformation(animatedDrawableBackend),
+            animationInfo,
             bitmapFrameRenderer,
             mUseNewBitmapRender.get(),
             bitmapFramePreparationStrategy,
@@ -212,10 +233,6 @@ public class DefaultBitmapAnimationDrawableFactory
   }
 
   private BitmapFrameCache createBitmapFrameCache(AnimatedImageResult animatedImageResult) {
-    if (mUseNewBitmapRender.get()) {
-      return new FrescoFrameCache2(animatedImageResult, mAnimatedDrawableCache.get());
-    }
-
     switch (mCachingStrategySupplier.get()) {
       case CACHING_STRATEGY_FRESCO_CACHE:
         return new FrescoFrameCache(createAnimatedFrameCache(animatedImageResult), true);

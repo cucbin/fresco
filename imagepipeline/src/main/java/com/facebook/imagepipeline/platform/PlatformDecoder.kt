@@ -34,7 +34,7 @@ interface PlatformDecoder {
       encodedImage: EncodedImage,
       bitmapConfig: Bitmap.Config,
       regionToDecode: Rect?
-  ): CloseableReference<Bitmap>
+  ): CloseableReference<Bitmap>?
 
   /**
    * Creates a bitmap from encoded JPEG bytes. Supports a partial JPEG image. In addition, a region
@@ -56,7 +56,7 @@ interface PlatformDecoder {
       bitmapConfig: Bitmap.Config,
       regionToDecode: Rect?,
       length: Int
-  ): CloseableReference<Bitmap>
+  ): CloseableReference<Bitmap>?
 
   /**
    * Creates a bitmap from encoded bytes. Supports JPEG but callers should use
@@ -68,8 +68,8 @@ interface PlatformDecoder {
    * @param bitmapConfig the [android.graphics.Bitmap.Config] used to create the decoded Bitmap
    * @param regionToDecode optional image region to decode or null to decode the whole image
    * @param colorSpace the target color space of the decoded bitmap, must be one of the named color
-   * space in [android.graphics.ColorSpace.Named]. If null, then SRGB color space is assumed if the
-   * SDK version >= 26.
+   *   space in [android.graphics.ColorSpace.Named]. If null, then SRGB color space is assumed if
+   *   the SDK version >= 26.
    * @return the bitmap
    * @throws TooManyBitmapsException if the pool is full
    * @throws java.lang.OutOfMemoryError if the Bitmap cannot be allocated
@@ -79,7 +79,7 @@ interface PlatformDecoder {
       bitmapConfig: Bitmap.Config,
       regionToDecode: Rect?,
       colorSpace: ColorSpace?
-  ): CloseableReference<Bitmap>
+  ): CloseableReference<Bitmap>?
 
   /**
    * Creates a bitmap from encoded JPEG bytes. Supports a partial JPEG image. In addition, a region
@@ -91,8 +91,8 @@ interface PlatformDecoder {
    * @param regionToDecode optional image region to decode or null to decode the whole image.
    * @param length the number of encoded bytes in the buffer
    * @param colorSpace the target color space of the decoded bitmap, must be one of the named color
-   * space in [android.graphics.ColorSpace.Named]. If null, then SRGB color space is assumed if the
-   * SDK version >= 26.
+   *   space in [android.graphics.ColorSpace.Named]. If null, then SRGB color space is assumed if
+   *   the SDK version >= 26.
    * @return the bitmap
    * @throws TooManyBitmapsException if the pool is full
    * @throws java.lang.OutOfMemoryError if the Bitmap cannot be allocated
@@ -103,5 +103,5 @@ interface PlatformDecoder {
       regionToDecode: Rect?,
       length: Int,
       colorSpace: ColorSpace?
-  ): CloseableReference<Bitmap>
+  ): CloseableReference<Bitmap>?
 }

@@ -11,11 +11,14 @@ import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import com.facebook.common.closeables.AutoCleanupDelegate
 import com.facebook.datasource.DataSource
 import com.facebook.drawee.drawable.VisibilityCallback
+import com.facebook.fresco.vito.core.CombinedImageListener
 import com.facebook.fresco.vito.core.FrescoDrawableInterface
+import com.facebook.fresco.vito.core.ImagePerfLoggingListener
 import com.facebook.fresco.vito.core.VitoImagePerfListener
 import com.facebook.fresco.vito.core.VitoImageRequest
 import com.facebook.fresco.vito.listener.ImageListener
@@ -23,15 +26,16 @@ import com.facebook.fresco.vito.renderer.DrawableImageDataModel
 import java.io.Closeable
 import java.io.IOException
 
-class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopImagePerfListener()) :
-    Drawable(), FrescoDrawableInterface {
+class KFrescoVitoDrawable(
+    private val _imagePerfListener: VitoImagePerfListener = NopImagePerfListener()
+) : Drawable(), FrescoDrawableInterface, Drawable.Callback {
 
   var _imageId: Long = 0
   var _isLoading: Boolean = false
   override var callerContext: Any? = null
   var _visibilityCallback: VisibilityCallback? = null
   var _fetchSubmitted: Boolean = false
-  val listenerManager: CombinedImageListenerImpl = CombinedImageListenerImpl()
+  val listenerManager: CombinedImageListener = CombinedImageListenerImpl()
   override var extras: Any? = null
   var viewportDimensions: Rect? = null
   var dataSource: DataSource<out Any>? by DataSourceCleanupDelegate()
@@ -40,6 +44,9 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
   private var hasBoundsSet = false
 
   override var imageRequest: VitoImageRequest? = null
+
+  var _intrinsicWidth: Int = -1
+  var _intrinsicHeight: Int = -1
 
   private val closeableCleanupFunction: (Closeable) -> Unit = {
     ImageReleaseScheduler.cancelAllReleasing(this)
@@ -53,6 +60,9 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
   var closeable: Closeable? by AutoCleanupDelegate(null, closeableCleanupFunction)
 
   override var refetchRunnable: Runnable? = null
+
+  override fun getImagePerfLoggingListener(): ImagePerfLoggingListener? =
+      listenerManager.getImagePerfLoggingListener()
 
   override val imageId: Long
     get() = _imageId
@@ -74,7 +84,7 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
 
   override fun hasImage(): Boolean = actualImageLayer.getDataModel() != null
 
-  fun setFetchSubmitted(fetchSubmitted: Boolean) {
+  override fun setFetchSubmitted(fetchSubmitted: Boolean) {
     _fetchSubmitted = fetchSubmitted
   }
 
@@ -116,6 +126,8 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
     imageRequest = null
     _isLoading = false
     callerContext = null
+    _intrinsicWidth = -1
+    _intrinsicHeight = -1
 
     placeholderLayer.reset()
     actualImageLayer.reset()
@@ -128,10 +140,9 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
     listenerManager.imageListener = null
   }
 
-  private var drawableAlpha: Int = 255
   private var drawableColorFilter: ColorFilter? = null
 
-  val callbackProvider: (() -> Callback?) = { callback }
+  val callbackProvider: (() -> Callback?) = { this }
   val invalidateLayerCallback: (() -> Unit) = { invalidateSelf() }
 
   val placeholderLayer = createLayer()
@@ -168,7 +179,11 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
   }
 
   override fun setAlpha(alpha: Int) {
-    drawableAlpha = alpha
+    placeholderLayer.setAlpha(alpha)
+    actualImageLayer.setAlpha(alpha)
+    progressLayer?.setAlpha(alpha)
+    overlayImageLayer.setAlpha(alpha)
+    debugOverlayImageLayer?.setAlpha(alpha)
   }
 
   override fun setColorFilter(colorFilter: ColorFilter?) {
@@ -179,4 +194,46 @@ class KFrescoVitoDrawable(val _imagePerfListener: VitoImagePerfListener = NopIma
   override fun getOpacity(): Int = PixelFormat.TRANSPARENT
 
   internal fun createLayer() = ImageLayerDataModel(callbackProvider, invalidateLayerCallback)
+
+  override fun invalidateDrawable(who: Drawable) {
+    invalidateSelf()
+  }
+
+  override fun scheduleDrawable(who: Drawable, what: Runnable, `when`: Long) {
+    scheduleSelf(what, `when`)
+  }
+
+  override fun unscheduleDrawable(who: Drawable, what: Runnable) {
+    unscheduleSelf(what)
+  }
+
+  override fun setIntrinsicSize(width: Int, height: Int) {
+    _intrinsicWidth = width
+    _intrinsicHeight = height
+  }
+
+  override fun configureWhenUnderlyingChanged() {
+    actualImageLayer.configure()
+  }
+
+  override fun getActualImageBounds(outBounds: RectF) {
+    // TODO
+    throw UnsupportedOperationException("Not implemented for KVito")
+  }
+
+  override fun reportVisible(visible: Boolean) {
+    getImagePerfLoggingListener()?.reportVisible(visible)
+  }
+
+  override fun getIntrinsicWidth(): Int {
+    return if (_intrinsicWidth !== -1) {
+      _intrinsicWidth
+    } else super.getIntrinsicWidth()
+  }
+
+  override fun getIntrinsicHeight(): Int {
+    return if (_intrinsicHeight !== -1) {
+      _intrinsicHeight
+    } else super.getIntrinsicHeight()
+  }
 }

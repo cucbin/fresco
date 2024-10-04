@@ -7,6 +7,7 @@
 
 package com.facebook.fresco.vito.view.impl
 
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.View
@@ -18,6 +19,7 @@ import com.facebook.common.internal.Suppliers
 import com.facebook.drawee.drawable.VisibilityCallback
 import com.facebook.fresco.vito.core.FrescoDrawableInterface
 import com.facebook.fresco.vito.core.VitoImageRequest
+import com.facebook.fresco.vito.core.VitoImageRequestListener
 import com.facebook.fresco.vito.listener.ImageListener
 import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.fresco.vito.provider.FrescoVitoProvider
@@ -25,8 +27,10 @@ import com.facebook.fresco.vito.source.ImageSource
 
 /** Vito View implementation */
 object VitoViewImpl2 {
-  @JvmStatic var useVisibilityCallbacks: Supplier<Boolean> = Suppliers.BOOLEAN_TRUE
-  @JvmStatic var useSimpleFetchLogic: Supplier<Boolean> = Suppliers.BOOLEAN_FALSE
+  @JvmField var useVisibilityCallbacks: Supplier<Boolean> = Suppliers.BOOLEAN_TRUE
+  @JvmField var useSimpleFetchLogic: Supplier<Boolean> = Suppliers.BOOLEAN_FALSE
+  @JvmField var useReleaseInViewDetached: Supplier<Boolean> = Suppliers.BOOLEAN_TRUE
+  @JvmField var useReleaseDelayedInViewDetached: Supplier<Boolean> = Suppliers.BOOLEAN_FALSE
 
   private val onAttachStateChangeListenerCallback: OnAttachStateChangeListener =
       object : OnAttachStateChangeListener {
@@ -40,7 +44,12 @@ object VitoViewImpl2 {
         override fun onViewDetachedFromWindow(view: View) {
           getDrawable(view)?.apply {
             imagePerfListener.onImageUnmount(this)
-            FrescoVitoProvider.getController().release(this)
+            if (useReleaseInViewDetached.get()) {
+              FrescoVitoProvider.getController().release(this)
+            }
+            if (useReleaseDelayedInViewDetached.get()) {
+              FrescoVitoProvider.getController().releaseDelayed(this)
+            }
           }
         }
       }
@@ -51,13 +60,21 @@ object VitoViewImpl2 {
       imageOptions: ImageOptions,
       callerContext: Any?,
       imageListener: ImageListener?,
+      imageRequestListener: VitoImageRequestListener?,
       target: View
   ) {
     show(
         FrescoVitoProvider.getImagePipeline()
-            .createImageRequest(target.resources, imageSource, imageOptions),
+            .createImageRequest(
+                target.resources,
+                imageSource,
+                imageOptions,
+                viewport = Rect(0, 0, target.width, target.height),
+                callerContext = callerContext,
+                forceKeepOriginalSize = false),
         callerContext,
         imageListener,
+        imageRequestListener,
         target)
   }
 
@@ -66,6 +83,7 @@ object VitoViewImpl2 {
       imageRequest: VitoImageRequest,
       callerContext: Any?,
       imageListener: ImageListener?,
+      imageRequestListener: VitoImageRequestListener?,
       target: View
   ) {
     val frescoDrawable = ensureDrawableSet(target)
@@ -76,7 +94,16 @@ object VitoViewImpl2 {
     }
     frescoDrawable.refetchRunnable = Runnable {
       FrescoVitoProvider.getController()
-          .fetch(frescoDrawable, imageRequest, callerContext, null, imageListener, null, null)
+          .fetch(
+              drawable = frescoDrawable,
+              imageRequest = imageRequest,
+              callerContext = callerContext,
+              contextChain = null,
+              listener = imageListener,
+              perfDataListener = null,
+              onFadeListener = null,
+              viewportDimensions = Rect(0, 0, target.width, target.height),
+              vitoImageRequestListener = imageRequestListener)
     }
     if (useSimpleFetchLogic.get()) {
       frescoDrawable.imagePerfListener.onImageMount(frescoDrawable)
@@ -145,7 +172,7 @@ object VitoViewImpl2 {
     }
   }
 
-  private fun getDrawable(view: View): FrescoDrawableInterface? {
+  fun getDrawable(view: View): FrescoDrawableInterface? {
     return (if (view is ImageView) view.drawable else view.background) as? FrescoDrawableInterface
   }
 

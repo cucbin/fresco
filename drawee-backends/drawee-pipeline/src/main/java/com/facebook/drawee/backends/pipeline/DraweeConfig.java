@@ -11,7 +11,7 @@ import com.facebook.common.internal.ImmutableList;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.internal.Suppliers;
-import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener;
+import com.facebook.fresco.ui.common.ImagePerfDataListener;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
@@ -63,7 +63,7 @@ public class DraweeConfig {
     return mDebugOverlayEnabledSupplier;
   }
 
-  public static class Builder {
+  public static final class Builder {
 
     @Nullable private List<DrawableFactory> mCustomDrawableFactories;
     @Nullable private Supplier<Boolean> mDebugOverlayEnabledSupplier;

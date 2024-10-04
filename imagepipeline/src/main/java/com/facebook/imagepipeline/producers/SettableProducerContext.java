@@ -15,7 +15,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /** ProducerContext that allows the client to change its internal state. */
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 public class SettableProducerContext extends BaseProducerContext {
 
@@ -51,7 +51,7 @@ public class SettableProducerContext extends BaseProducerContext {
       ImageRequest imageRequest,
       String id,
       ProducerListener2 producerListener,
-      Object callerContext,
+      @Nullable Object callerContext,
       ImageRequest.RequestLevel lowestPermittedRequestLevel,
       boolean isPrefetch,
       boolean isIntermediateResultExpected,
@@ -74,7 +74,7 @@ public class SettableProducerContext extends BaseProducerContext {
       String id,
       @Nullable String uiComponentId,
       ProducerListener2 producerListener,
-      Object callerContext,
+      @Nullable Object callerContext,
       ImageRequest.RequestLevel lowestPermittedRequestLevel,
       boolean isPrefetch,
       boolean isIntermediateResultExpected,
@@ -84,6 +84,7 @@ public class SettableProducerContext extends BaseProducerContext {
         imageRequest,
         id,
         uiComponentId,
+        null,
         producerListener,
         callerContext,
         lowestPermittedRequestLevel,

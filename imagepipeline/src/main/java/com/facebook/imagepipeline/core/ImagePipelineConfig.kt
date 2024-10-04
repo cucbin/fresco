@@ -59,7 +59,6 @@ import com.facebook.imagepipeline.systrace.FrescoSystrace.endSection
 import com.facebook.imagepipeline.systrace.FrescoSystrace.isTracing
 import com.facebook.imagepipeline.systrace.FrescoSystrace.traceSection
 import com.facebook.imagepipeline.transcoder.ImageTranscoderFactory
-import java.util.HashSet
 
 /**
  * Main configuration class for the image pipeline library.
@@ -82,13 +81,14 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
   override val bitmapMemoryCacheEntryStateObserver: EntryStateObserver<CacheKey>?
   override val cacheKeyFactory: CacheKeyFactory
   override val context: Context
-  override val isDownsampleEnabled: Boolean
-  override val fileCacheFactory: FileCacheFactory
+  override val downsampleMode: DownsampleMode
+  override val diskCachesStoreSupplier: Supplier<DiskCachesStore>
   override val encodedMemoryCacheParamsSupplier: Supplier<MemoryCacheParams>
   override val executorSupplier: ExecutorSupplier
   override val imageCacheStatsTracker: ImageCacheStatsTracker
   override val imageDecoder: ImageDecoder?
   override val imageTranscoderFactory: ImageTranscoderFactory?
+  override val enableEncodedImageColorSpaceUsage: Supplier<Boolean>
 
   @get:ImageTranscoderType @ImageTranscoderType override val imageTranscoderType: Int?
   override val isPrefetchEnabledSupplier: Supplier<Boolean>
@@ -103,7 +103,7 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
   override val progressiveJpegConfig: ProgressiveJpegConfig
   override val requestListeners: Set<RequestListener>
   override val requestListener2s: Set<RequestListener2>
-  override val customProducerSequenceFactories: Set<CustomProducerSequenceFactory>?
+  override val customProducerSequenceFactories: Set<CustomProducerSequenceFactory>
   override val isResizeAndRotateEnabledForNetwork: Boolean
   override val smallImageDiskCacheConfig: DiskCacheConfig
   override val imageDecoderConfig: ImageDecoderConfig?
@@ -115,6 +115,7 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
   override val encodedMemoryCacheOverride: MemoryCache<CacheKey, PooledByteBuffer>?
   override val executorServiceForAnimatedImages: SerialExecutorService?
   override val bitmapMemoryCacheFactory: BitmapMemoryCacheFactory
+  override val dynamicDiskCacheConfigMap: Map<String, DiskCacheConfig>?
 
   init {
     if (isTracing()) {
@@ -135,14 +136,14 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
     bitmapConfig = builder.bitmapConfig ?: Bitmap.Config.ARGB_8888
     cacheKeyFactory = builder.cacheKeyFactory ?: DefaultCacheKeyFactory.getInstance()
     context = checkNotNull(builder.context)
-    fileCacheFactory =
-        builder.fileCacheFactory ?: DiskStorageCacheFactory(DynamicDefaultDiskStorageFactory())
-    isDownsampleEnabled = builder.downsampleEnabled
+    downsampleMode = builder.downsampleMode
     encodedMemoryCacheParamsSupplier =
         builder.encodedMemoryCacheParamsSupplier ?: DefaultEncodedMemoryCacheParamsSupplier()
     imageCacheStatsTracker =
         builder.imageCacheStatsTracker ?: NoOpImageCacheStatsTracker.getInstance()
     imageDecoder = builder.imageDecoder
+    enableEncodedImageColorSpaceUsage =
+        builder.enableEncodedImageColorSpaceUsage ?: Suppliers.BOOLEAN_FALSE
     imageTranscoderFactory = getImageTranscoderFactory(builder)
     imageTranscoderType = builder.imageTranscoderType
     isPrefetchEnabledSupplier = builder.isPrefetchEnabledSupplier ?: Suppliers.BOOLEAN_TRUE
@@ -161,9 +162,9 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
     platformBitmapFactory = builder.platformBitmapFactory
     poolFactory = builder.poolFactory ?: PoolFactory(PoolConfig.newBuilder().build())
     progressiveJpegConfig = builder.progressiveJpegConfig ?: SimpleProgressiveJpegConfig()
-    requestListeners = builder.requestListeners ?: HashSet()
-    requestListener2s = builder.requestListener2s ?: HashSet()
-    customProducerSequenceFactories = builder.customProducerSequenceFactories
+    requestListeners = builder.requestListeners ?: emptySet()
+    requestListener2s = builder.requestListener2s ?: emptySet()
+    customProducerSequenceFactories = builder.customProducerSequenceFactories ?: emptySet()
     isResizeAndRotateEnabledForNetwork = builder.resizeAndRotateEnabledForNetwork
     smallImageDiskCacheConfig = builder.smallImageDiskCacheConfig ?: mainDiskCacheConfig
     imageDecoderConfig = builder.imageDecoderConfig
@@ -178,20 +179,18 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
         builder.bitmapMemoryCacheFactory ?: CountingLruBitmapMemoryCacheFactory()
     encodedMemoryCacheOverride = builder.encodedMemoryCache
     executorServiceForAnimatedImages = builder.serialExecutorServiceForAnimatedImages
+    dynamicDiskCacheConfigMap = builder.dynamicDiskCacheConfigMap
+    diskCachesStoreSupplier =
+        builder.diskCachesStoreSupplier
+            ?: DiskCachesStoreFactory(
+                builder.fileCacheFactory
+                    ?: DiskStorageCacheFactory(DynamicDefaultDiskStorageFactory()),
+                this@ImagePipelineConfig)
     // Here we manage the WebpBitmapFactory implementation if any
-    var webpBitmapFactory = experiments.webpBitmapFactory
+    val webpBitmapFactory = experiments.webpBitmapFactory
     if (webpBitmapFactory != null) {
       val bitmapCreator: BitmapCreator = HoneycombBitmapCreator(poolFactory)
       setWebpBitmapFactory(webpBitmapFactory, experiments, bitmapCreator)
-    } else {
-      // We check using introspection only if the experiment is enabled
-      if (experiments.isWebpSupportEnabled && WebpSupportStatus.sIsWebpSupportRequired) {
-        webpBitmapFactory = WebpSupportStatus.loadWebpBitmapFactoryIfExists()
-        if (webpBitmapFactory != null) {
-          val bitmapCreator: BitmapCreator = HoneycombBitmapCreator(poolFactory)
-          setWebpBitmapFactory(webpBitmapFactory, experiments, bitmapCreator)
-        }
-      }
     }
     if (isTracing()) {
       endSection()
@@ -206,79 +205,121 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
   class Builder(context: Context) {
     var bitmapConfig: Bitmap.Config? = null
       private set
+
     var bitmapMemoryCacheParamsSupplier: Supplier<MemoryCacheParams>? = null
       private set
+
     var bitmapMemoryCacheEntryStateObserver: EntryStateObserver<CacheKey>? = null
       private set
+
     var bitmapMemoryCacheTrimStrategy: CacheTrimStrategy? = null
       private set
+
     var encodedMemoryCacheTrimStrategy: CacheTrimStrategy? = null
       private set
+
     var cacheKeyFactory: CacheKeyFactory? = null
       private set
+
     val context: Context
-    var downsampleEnabled = false
+
+    var downsampleMode = DownsampleMode.AUTO
       private set
+
     var encodedMemoryCacheParamsSupplier: Supplier<MemoryCacheParams>? = null
       private set
+
     var executorSupplier: ExecutorSupplier? = null
       private set
+
     var imageCacheStatsTracker: ImageCacheStatsTracker? = null
       private set
+
     var imageDecoder: ImageDecoder? = null
       private set
+
+    var enableEncodedImageColorSpaceUsage: Supplier<Boolean>? = null
+      private set
+
     var imageTranscoderFactory: ImageTranscoderFactory? = null
       private set
 
     @ImageTranscoderType var imageTranscoderType: Int? = null
     var isPrefetchEnabledSupplier: Supplier<Boolean>? = null
       private set
+
     var mainDiskCacheConfig: DiskCacheConfig? = null
       private set
+
     var memoryTrimmableRegistry: MemoryTrimmableRegistry? = null
       private set
 
     @MemoryChunkType var memoryChunkType: Int? = null
     var networkFetcher: NetworkFetcher<*>? = null
       private set
+
     var platformBitmapFactory: PlatformBitmapFactory? = null
       private set
+
     var poolFactory: PoolFactory? = null
       private set
+
     var progressiveJpegConfig: ProgressiveJpegConfig? = null
       private set
+
     var requestListeners: Set<RequestListener>? = null
       private set
+
     var requestListener2s: Set<RequestListener2>? = null
       private set
+
     var customProducerSequenceFactories: Set<CustomProducerSequenceFactory>? = null
       private set
+
     var resizeAndRotateEnabledForNetwork = true
       private set
+
     var smallImageDiskCacheConfig: DiskCacheConfig? = null
       private set
+
     var fileCacheFactory: FileCacheFactory? = null
       private set
+
+    var diskCachesStoreSupplier: Supplier<DiskCachesStore>? = null
+      private set
+
     var imageDecoderConfig: ImageDecoderConfig? = null
       private set
+
     var httpConnectionTimeout = -1
       private set
+
     val experimentsBuilder = ImagePipelineExperiments.Builder(this)
     var diskCacheEnabled = true
       private set
+
     var callerContextVerifier: CallerContextVerifier? = null
       private set
+
     var closeableReferenceLeakTracker: CloseableReferenceLeakTracker =
         NoOpCloseableReferenceLeakTracker()
       private set
+
     var bitmapMemoryCache: MemoryCache<CacheKey, CloseableImage>? = null
       private set
+
     var encodedMemoryCache: MemoryCache<CacheKey, PooledByteBuffer>? = null
       private set
+
     var serialExecutorServiceForAnimatedImages: SerialExecutorService? = null
       private set
+
     var bitmapMemoryCacheFactory: BitmapMemoryCacheFactory? = null
       private set
+
+    var dynamicDiskCacheConfigMap: Map<String, DiskCacheConfig>? = null
+      private set
+
     fun setBitmapsConfig(config: Bitmap.Config?): Builder = apply { this.bitmapConfig = config }
 
     fun setBitmapMemoryCacheParamsSupplier(
@@ -309,14 +350,28 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
       this.httpConnectionTimeout = httpConnectionTimeoutMs
     }
 
-    fun setFileCacheFactory(fileCacheFactory: FileCacheFactory?): Builder = apply {
+    fun setFileCacheFactory(fileCacheFactory: FileCacheFactory): Builder = apply {
       this.fileCacheFactory = fileCacheFactory
     }
 
-    fun isDownsampleEnabled(): Boolean = this.downsampleEnabled
+    fun setDiskCachesStoreSupplier(diskCachesStoreSupplier: Supplier<DiskCachesStore>): Builder =
+        apply {
+          this.diskCachesStoreSupplier = diskCachesStoreSupplier
+        }
 
+    fun isDownsampleEnabled(): Boolean = this.downsampleMode === DownsampleMode.ALWAYS
+
+    fun setDownsampleMode(downsampleMode: DownsampleMode): Builder = apply {
+      this.downsampleMode = downsampleMode
+    }
+
+    @Deprecated("Use the new setDownsampleMode() method")
     fun setDownsampleEnabled(downsampleEnabled: Boolean): Builder = apply {
-      this.downsampleEnabled = downsampleEnabled
+      if (downsampleEnabled) {
+        setDownsampleMode(DownsampleMode.ALWAYS)
+      } else {
+        setDownsampleMode(DownsampleMode.AUTO)
+      }
     }
 
     fun isDiskCacheEnabled(): Boolean = this.diskCacheEnabled
@@ -342,6 +397,12 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
 
     fun setImageDecoder(imageDecoder: ImageDecoder?): Builder = apply {
       this.imageDecoder = imageDecoder
+    }
+
+    fun setEnableEncodedImageColorSpaceUsage(
+        enableEncodedImageColorSpaceUsage: Supplier<Boolean>?
+    ): Builder = apply {
+      this.enableEncodedImageColorSpaceUsage = enableEncodedImageColorSpaceUsage
     }
 
     fun setImageTranscoderType(@ImageTranscoderType imageTranscoderType: Int): Builder = apply {
@@ -438,6 +499,10 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
           this.bitmapMemoryCacheFactory = bitmapMemoryCacheFactory
         }
 
+    fun setDynamicDiskCacheConfigMap(
+        dynamicDiskCacheConfigMap: Map<String, DiskCacheConfig>
+    ): Builder = apply { this.dynamicDiskCacheConfigMap = dynamicDiskCacheConfigMap }
+
     fun experiment(): ImagePipelineExperiments.Builder = experimentsBuilder
 
     fun build(): ImagePipelineConfig = ImagePipelineConfig(this)
@@ -469,15 +534,8 @@ class ImagePipelineConfig private constructor(builder: Builder) : ImagePipelineC
     }
 
     private fun getDefaultMainDiskCacheConfig(context: Context): DiskCacheConfig =
-        try {
-          if (isTracing()) {
-            beginSection("DiskCacheConfig.getDefaultMainDiskCacheConfig")
-          }
+        traceSection("DiskCacheConfig.getDefaultMainDiskCacheConfig") {
           DiskCacheConfig.newBuilder(context).build()
-        } finally {
-          if (isTracing()) {
-            endSection()
-          }
         }
 
     @JvmStatic

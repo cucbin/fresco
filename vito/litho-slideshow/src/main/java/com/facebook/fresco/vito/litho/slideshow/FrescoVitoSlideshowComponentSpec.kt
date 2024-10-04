@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import com.facebook.common.callercontext.ContextChain
 import com.facebook.fresco.vito.core.FrescoDrawableInterface
+import com.facebook.fresco.vito.listener.ImageListener
 import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.fresco.vito.provider.FrescoVitoProvider
 import com.facebook.fresco.vito.source.ImageSourceProvider
@@ -65,9 +66,11 @@ object FrescoVitoSlideshowComponentSpec {
       @Prop(varArg = "uri") uris: List<Uri?>,
       @Prop photoTransitionMs: Int,
       @Prop fadeTransitionMs: Int,
+      @Prop(optional = true) heroMediaTransitionMs: Int?,
       @Prop(optional = true) isPlaying: Boolean,
       @Prop(optional = true) imageOptions: ImageOptions?,
       @Prop(optional = true) callerContext: Any?,
+      @Prop(optional = true) imageListener: ImageListener?,
       @TreeProp contextChain: ContextChain?,
       @State(canUpdateLazily = true) slideshowIndex: Int,
       @State(canUpdateLazily = true) timer: Timer,
@@ -87,10 +90,11 @@ object FrescoVitoSlideshowComponentSpec {
     fetchNextImage(
         c.resources,
         slideshowDrawable,
-        uris[slideshowIndex],
+        uris[slideshowIndex % uris.size],
         imageOptions,
         callerContext,
-        contextChain)
+        contextChain,
+        imageListener)
     // Immediately show current image
     slideshowDrawable.fadeToNext()
     slideshowDrawable.finishTransitionImmediately()
@@ -104,13 +108,29 @@ object FrescoVitoSlideshowComponentSpec {
           uris[nextImageIndex],
           imageOptions,
           callerContext,
-          contextChain)
+          contextChain,
+          imageListener)
 
+      var delayAttempt = 0
+      val maxDelayAttempts =
+          if (heroMediaTransitionMs !== null)
+              heroMediaTransitionMs.div(photoTransitionMs + fadeTransitionMs)
+          else 0
       // Set up task for animating to next image
       val animation: Runnable =
           object : Runnable {
             var currentIndex = nextImageIndex
+
             override fun run() {
+              if (heroMediaTransitionMs !== null) {
+                if (currentIndex == 1 && delayAttempt < maxDelayAttempts) {
+                  delayAttempt++
+                  return
+                } else {
+                  delayAttempt = 0
+                }
+              }
+
               val nextIndex = (currentIndex + 1) % listSize
               animateToNextImage(
                   c.resources,
@@ -119,7 +139,8 @@ object FrescoVitoSlideshowComponentSpec {
                   imageOptions,
                   callerContext,
                   contextChain,
-                  nextIndex)
+                  nextIndex,
+                  imageListener)
               currentIndex = nextIndex
               FrescoVitoSlideshowComponent.lazyUpdateSlideshowIndex(c, currentIndex)
             }
@@ -159,7 +180,8 @@ object FrescoVitoSlideshowComponentSpec {
       options: ImageOptions?,
       callerContext: Any?,
       contextChain: ContextChain?,
-      nextIndex: Int
+      nextIndex: Int,
+      listener: ImageListener?
   ) {
     // Do not transition until both current and next images are available
     if (isStillLoading(slideshowDrawable.currentImage) ||
@@ -170,7 +192,13 @@ object FrescoVitoSlideshowComponentSpec {
     slideshowDrawable.fadeToNext()
     // Fetch the next image ahead of time
     fetchNextImage(
-        resources, slideshowDrawable, uris[nextIndex], options, callerContext, contextChain)
+        resources,
+        slideshowDrawable,
+        uris[nextIndex % uris.size],
+        options,
+        callerContext,
+        contextChain,
+        listener)
   }
 
   private fun isStillLoading(frescoDrawable: FrescoDrawableInterface): Boolean =
@@ -182,17 +210,23 @@ object FrescoVitoSlideshowComponentSpec {
       uri: Uri?,
       options: ImageOptions?,
       callerContext: Any?,
-      contextChain: ContextChain?
+      contextChain: ContextChain?,
+      listener: ImageListener?
   ) {
     FrescoVitoProvider.getController()
         .fetch(
-            slideshowDrawable.nextImage,
-            FrescoVitoProvider.getImagePipeline()
-                .createImageRequest(resources, ImageSourceProvider.forUri(uri), options),
-            callerContext,
-            contextChain,
-            null,
-            null,
-            null)
+            drawable = slideshowDrawable.nextImage,
+            imageRequest =
+                FrescoVitoProvider.getImagePipeline()
+                    .createImageRequest(
+                        resources,
+                        ImageSourceProvider.forUri(uri),
+                        options,
+                        callerContext = callerContext),
+            callerContext = callerContext,
+            contextChain = contextChain,
+            listener = listener,
+            onFadeListener = null,
+            viewportDimensions = null)
   }
 }

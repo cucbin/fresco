@@ -9,6 +9,7 @@ package com.facebook.fresco.vito.core
 
 import android.content.res.Resources
 import android.graphics.Rect
+import com.facebook.common.callercontext.ContextChain
 import com.facebook.common.references.CloseableReference
 import com.facebook.datasource.DataSource
 import com.facebook.fresco.vito.options.ImageOptions
@@ -18,17 +19,23 @@ import com.facebook.imagepipeline.listener.RequestListener
 
 interface VitoImagePipeline {
 
+  /**
+   * @param logWithHighSamplingRate The flag is a hint to loggers that they should log all events
+   *   for this request at a higher sampling rate. A logger may choose to satisfy this request for
+   *   example, by logging every event (sampling ratio 1:1) at the expense of potentially increased
+   *   storage and compute capacity. Each logger may interpret this field differently and can choose
+   *   to ignore it.
+   * @return a new instance of VitoImageRequest
+   */
   fun createImageRequest(
       resources: Resources,
       imageSource: ImageSource,
       options: ImageOptions?,
-  ): VitoImageRequest
-
-  fun createImageRequest(
-      resources: Resources,
-      imageSource: ImageSource,
-      options: ImageOptions?,
-      viewport: Rect?
+      logWithHighSamplingRate: Boolean = false,
+      viewport: Rect? = null,
+      callerContext: Any? = null,
+      contextChain: ContextChain? = null,
+      forceKeepOriginalSize: Boolean = false,
   ): VitoImageRequest
 
   fun getCachedImage(imageRequest: VitoImageRequest): CloseableReference<CloseableImage>?
@@ -39,4 +46,8 @@ interface VitoImagePipeline {
       requestListener: RequestListener?,
       uiComponentId: Long
   ): DataSource<CloseableReference<CloseableImage>>
+
+  fun isInDiskCacheSync(
+      imageRequest: VitoImageRequest,
+  ): Boolean
 }

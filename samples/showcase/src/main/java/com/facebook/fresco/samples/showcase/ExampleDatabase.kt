@@ -37,22 +37,19 @@ object ExampleDatabase {
           ExampleCategory(
               "Drawee",
               listOf(
-                  ExampleItem("Simple Drawee") { DraweeSimpleFragment() },
-                  ExampleItem("Media Provider") { DraweeMediaPickerFragment() },
-                  ExampleItem("Scale Type") { DraweeScaleTypeFragment() },
                   ExampleItem("Simple DraweeSpan") { DraweeSpanSimpleTextFragment() },
                   ExampleItem("Rounded Corners") { DraweeRoundedCornersFragment() },
                   ExampleItem("Placeholder, Progress, Failure") { DraweeHierarchyFragment() },
-                  ExampleItem("Rotation") { DraweeRotationFragment() },
                   ExampleItem("Recycler View") { DraweeRecyclerViewFragment() },
                   ExampleItem("Drawee Transition") { DraweeTransitionFragment() },
                   ExampleItem("Retaining Data Source Supplier") {
                     RetainingDataSourceSupplierFragment()
                   },
-                  ExampleItem("Multi URI") { MultiUriFragment() })),
+              )),
           ExampleCategory(
               "Image Pipeline",
               listOf(
+                  ExampleItem("Downsample Modes") { ImagePipelineDownsampleFragment() },
                   ExampleItem("Notifications") { ImagePipelineNotificationFragment() },
                   ExampleItem("Post-Processor") { ImagePipelinePostProcessorFragment() },
                   ExampleItem("Prefetch") { ImagePipelinePrefetchFragment() },
@@ -94,8 +91,11 @@ object ExampleDatabase {
                       "Vito Litho: Listener",
                       FrescoVitoLithoListenerExample,
                       "Vito Litho component with listener."),
+                  ExampleItem("Scale Type") { VitoScaleTypeFragment() },
+                  ExampleItem("Rotation") { VitoRotationFragment() },
                   ExampleItem("Vito Litho: Gallery") { FrescoVitoLithoGalleryFragment() },
                   ExampleItem("Vito View: Simple") { VitoViewSimpleFragment() },
+                  ExampleItem("Vito View: Simple 2") { VitoSimpleFragment() },
                   ExampleItem("Vito View: Recycler") { VitoViewRecyclerFragment() },
                   ExampleItem("Vito View: Prefetch") { VitoViewPrefetchFragment() },
                   ExampleItem("Vito View: Kotlin Extensions") { VitoViewKtxFragment() },
@@ -106,6 +106,10 @@ object ExampleDatabase {
                   ExampleItem(
                       "Vito Litho: NinePatch", LithoNinePatchSample(), "Litho nine patch example"),
                   ExampleItem("Vito Text Span") { VitoSpanFragment() },
+                  ExampleItem(
+                      "Vito Litho DrawableImageSource", FrescoVitoLithoDrawableImageSourceExample),
+                  ExampleItem("Media Provider") { VitoMediaPickerFragment() },
+                  ExampleItem("Multi URI") { MultiUriFragment() },
               )),
           ExampleCategory(
               "Vito Renderer",

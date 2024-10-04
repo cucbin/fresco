@@ -20,26 +20,24 @@ import com.facebook.common.references.CloseableReference;
 import com.facebook.common.time.AwakeTimeSinceBootClock;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawable.base.DrawableWithCaches;
-import com.facebook.drawee.backends.pipeline.debug.DebugOverlayImageOriginColor;
-import com.facebook.drawee.backends.pipeline.debug.DebugOverlayImageOriginListener;
 import com.facebook.drawee.backends.pipeline.info.ForwardingImageOriginListener;
 import com.facebook.drawee.backends.pipeline.info.ImageOrigin;
 import com.facebook.drawee.backends.pipeline.info.ImageOriginListener;
 import com.facebook.drawee.backends.pipeline.info.ImageOriginRequestListener;
-import com.facebook.drawee.backends.pipeline.info.ImageOriginUtils;
-import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener;
 import com.facebook.drawee.backends.pipeline.info.ImagePerfMonitor;
 import com.facebook.drawee.components.DeferredReleaser;
 import com.facebook.drawee.controller.AbstractDraweeController;
 import com.facebook.drawee.controller.AbstractDraweeControllerBuilder;
 import com.facebook.drawee.debug.DebugControllerOverlayDrawable;
 import com.facebook.drawee.debug.listener.ImageLoadingTimeControllerListener;
+import com.facebook.drawee.drawable.ArrayDrawable;
+import com.facebook.drawee.drawable.DrawableParent;
 import com.facebook.drawee.drawable.ScaleTypeDrawable;
-import com.facebook.drawee.drawable.ScalingUtils;
 import com.facebook.drawee.drawable.ScalingUtils.ScaleType;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.interfaces.DraweeHierarchy;
 import com.facebook.drawee.interfaces.SettableDraweeHierarchy;
+import com.facebook.fresco.ui.common.ImagePerfDataListener;
 import com.facebook.fresco.ui.common.MultiUriHelper;
 import com.facebook.imagepipeline.cache.MemoryCache;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
@@ -95,7 +93,6 @@ public class PipelineDraweeController
   @Nullable
   private ImageOriginListener mImageOriginListener;
 
-  private DebugOverlayImageOriginListener mDebugOverlayImageOriginListener;
   private @Nullable ImageRequest mImageRequest;
   private @Nullable ImageRequest[] mFirstAvailableImageRequests;
   private @Nullable ImageRequest mLowResImageRequest;
@@ -128,8 +125,7 @@ public class PipelineDraweeController
       String id,
       CacheKey cacheKey,
       Object callerContext,
-      @Nullable ImmutableList<DrawableFactory> customDrawableFactories,
-      @Nullable ImageOriginListener imageOriginListener) {
+      @Nullable ImmutableList<DrawableFactory> customDrawableFactories) {
     if (FrescoSystrace.isTracing()) {
       FrescoSystrace.beginSection("PipelineDraweeController#initialize");
     }
@@ -137,9 +133,7 @@ public class PipelineDraweeController
     init(dataSourceSupplier);
     mCacheKey = cacheKey;
     setCustomDrawableFactories(customDrawableFactories);
-    clearImageOriginListeners();
     maybeUpdateDebugOverlay(null);
-    addImageOriginListener(imageOriginListener);
     if (FrescoSystrace.isTracing()) {
       FrescoSystrace.endSection();
     }
@@ -152,18 +146,16 @@ public class PipelineDraweeController
               ImageRequest,
               CloseableReference<CloseableImage>,
               ImageInfo>
-          builder,
-      Supplier<Boolean> asyncLogging) {
+          builder) {
     if (mImagePerfMonitor != null) {
       mImagePerfMonitor.reset();
     }
     if (imagePerfDataListener != null) {
       if (mImagePerfMonitor == null) {
-        mImagePerfMonitor = new ImagePerfMonitor(AwakeTimeSinceBootClock.get(), this, asyncLogging);
+        mImagePerfMonitor = new ImagePerfMonitor(AwakeTimeSinceBootClock.get(), this);
       }
       mImagePerfMonitor.addImagePerfDataListener(imagePerfDataListener);
       mImagePerfMonitor.setEnabled(true);
-      mImagePerfMonitor.updateImageRequestData(builder);
     }
 
     mImageRequest = builder.getImageRequest();
@@ -194,18 +186,6 @@ public class PipelineDraweeController
     mRequestListeners.remove(requestListener);
   }
 
-  public synchronized void addImageOriginListener(ImageOriginListener imageOriginListener) {
-    if (mImageOriginListener instanceof ForwardingImageOriginListener) {
-      ((ForwardingImageOriginListener) mImageOriginListener)
-          .addImageOriginListener(imageOriginListener);
-    } else if (mImageOriginListener != null) {
-      mImageOriginListener =
-          new ForwardingImageOriginListener(mImageOriginListener, imageOriginListener);
-    } else {
-      mImageOriginListener = imageOriginListener;
-    }
-  }
-
   public synchronized void removeImageOriginListener(ImageOriginListener imageOriginListener) {
     if (mImageOriginListener instanceof ForwardingImageOriginListener) {
       ((ForwardingImageOriginListener) mImageOriginListener)
@@ -213,12 +193,6 @@ public class PipelineDraweeController
       return;
     }
     if (mImageOriginListener == imageOriginListener) {
-      mImageOriginListener = null;
-    }
-  }
-
-  protected void clearImageOriginListeners() {
-    synchronized (this) {
       mImageOriginListener = null;
     }
   }
@@ -341,13 +315,8 @@ public class PipelineDraweeController
       final DebugControllerOverlayDrawable controllerOverlay = new DebugControllerOverlayDrawable();
       ImageLoadingTimeControllerListener overlayImageLoadListener =
           new ImageLoadingTimeControllerListener(controllerOverlay);
-      mDebugOverlayImageOriginListener = new DebugOverlayImageOriginListener();
       addControllerListener(overlayImageLoadListener);
       setControllerOverlay(controllerOverlay);
-    }
-
-    if (mImageOriginListener == null) {
-      addImageOriginListener(mDebugOverlayImageOriginListener);
     }
 
     if (getControllerOverlay() instanceof DebugControllerOverlayDrawable) {
@@ -367,16 +336,15 @@ public class PipelineDraweeController
     ScaleType scaleType = null;
     if (draweeHierarchy != null) {
       final ScaleTypeDrawable scaleTypeDrawable =
-          ScalingUtils.getActiveScaleTypeDrawable(draweeHierarchy.getTopLevelDrawable());
+          getActiveScaleTypeDrawable(draweeHierarchy.getTopLevelDrawable());
       scaleType = scaleTypeDrawable != null ? scaleTypeDrawable.getScaleType() : null;
     }
     debugOverlay.setScaleType(scaleType);
 
-    // fill in image origin text and color hint
-    final int origin = mDebugOverlayImageOriginListener.getImageOrigin();
-    final String originText = ImageOriginUtils.toString(origin);
-    final int originColor = DebugOverlayImageOriginColor.getImageOriginColor(origin);
-    debugOverlay.setOrigin(originText, originColor);
+    String callerContextString = getCallerContextString();
+    if (callerContextString != null) {
+      debugOverlay.addAdditionalData("cc", callerContextString);
+    }
 
     if (image != null) {
       debugOverlay.setDimensions(image.getWidth(), image.getHeight());
@@ -389,7 +357,7 @@ public class PipelineDraweeController
   @Override
   protected ImageInfo getImageInfo(CloseableReference<CloseableImage> image) {
     Preconditions.checkState(CloseableReference.isValid(image));
-    return image.get();
+    return image.get().getImageInfo();
   }
 
   @Override
@@ -469,5 +437,37 @@ public class PipelineDraweeController
         mLowResImageRequest,
         mFirstAvailableImageRequests,
         ImageRequest.REQUEST_TO_URI_FN);
+  }
+
+  protected @Nullable String getCallerContextString() {
+    Object cc = getCallerContext();
+    if (cc == null) {
+      return null;
+    }
+    return cc.toString();
+  }
+
+  @Nullable
+  public static ScaleTypeDrawable getActiveScaleTypeDrawable(@Nullable Drawable drawable) {
+    if (drawable == null) {
+      return null;
+    } else if (drawable instanceof ScaleTypeDrawable) {
+      return (ScaleTypeDrawable) drawable;
+    } else if (drawable instanceof DrawableParent) {
+      final Drawable childDrawable = ((DrawableParent) drawable).getDrawable();
+      return getActiveScaleTypeDrawable(childDrawable);
+    } else if (drawable instanceof ArrayDrawable) {
+      final ArrayDrawable fadeDrawable = (ArrayDrawable) drawable;
+      final int numLayers = fadeDrawable.getNumberOfLayers();
+
+      for (int i = 0; i < numLayers; i++) {
+        final Drawable childDrawable = fadeDrawable.getDrawable(i);
+        final ScaleTypeDrawable result = getActiveScaleTypeDrawable(childDrawable);
+        if (result != null) {
+          return result;
+        }
+      }
+    }
+    return null;
   }
 }

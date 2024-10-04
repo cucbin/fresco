@@ -15,11 +15,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.facebook.common.internal.Suppliers;
 import com.facebook.common.time.MonotonicClock;
 import com.facebook.drawee.backends.pipeline.PipelineDraweeController;
-import com.facebook.drawee.backends.pipeline.info.internal.ImagePerfControllerListener2;
-import com.facebook.drawee.backends.pipeline.info.internal.ImagePerfImageOriginListener;
+import com.facebook.drawee.backends.pipeline.info.internal.ImagePerfStateManager;
+import com.facebook.fresco.ui.common.ImageLoadStatus;
+import com.facebook.fresco.ui.common.ImagePerfData;
+import com.facebook.fresco.ui.common.ImagePerfDataListener;
+import com.facebook.fresco.ui.common.ImagePerfState;
 import com.facebook.imagepipeline.listener.RequestListener;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,17 +45,15 @@ public class ImagePerfMonitorTest {
     mController = mock(PipelineDraweeController.class);
     when(mController.getId()).thenReturn(CONTROLLER_ID);
 
-    mImagePerfMonitor = new ImagePerfMonitor(mMonotonicClock, mController, Suppliers.BOOLEAN_FALSE);
+    mImagePerfMonitor = new ImagePerfMonitor(mMonotonicClock, mController);
   }
 
   @Test
   public void testSetEnabled() {
     mImagePerfMonitor.setEnabled(true);
 
-    verify(mController).addImageOriginListener(any(ImagePerfImageOriginListener.class));
-    verify(mController).addControllerListener2(any(ImagePerfControllerListener2.class));
+    verify(mController).addControllerListener2(any(ImagePerfStateManager.class));
     verify(mController).addRequestListener(any(RequestListener.class));
-    verify(mController).getId();
     verifyNoMoreInteractions(mController);
   }
 
@@ -62,12 +62,9 @@ public class ImagePerfMonitorTest {
     mImagePerfMonitor.setEnabled(true);
     mImagePerfMonitor.setEnabled(false);
 
-    verify(mController).addImageOriginListener(any(ImagePerfImageOriginListener.class));
-    verify(mController).addControllerListener2(any(ImagePerfControllerListener2.class));
+    verify(mController).addControllerListener2(any(ImagePerfStateManager.class));
     verify(mController).addRequestListener(any(RequestListener.class));
-    verify(mController).getId();
-    verify(mController).removeImageOriginListener(any(ImagePerfImageOriginListener.class));
-    verify(mController).removeControllerListener2(any(ImagePerfControllerListener2.class));
+    verify(mController).removeControllerListener2(any(ImagePerfStateManager.class));
     verify(mController).removeRequestListener(any(RequestListener.class));
     verifyNoMoreInteractions(mController);
   }

@@ -11,11 +11,13 @@ import com.facebook.common.internal.Preconditions;
 import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class RefCountCloseableReference<T> extends CloseableReference<T> {
 
   private RefCountCloseableReference(
-      SharedReference<T> sharedReference, LeakHandler leakHandler, @Nullable Throwable stacktrace) {
+      SharedReference<T> sharedReference,
+      @Nullable LeakHandler leakHandler,
+      @Nullable Throwable stacktrace) {
     super(sharedReference, leakHandler, stacktrace);
   }
 

@@ -38,7 +38,10 @@ import javax.annotation.Nullable;
  * term solution in order to inherit some of its implementation (padding calculations, etc.). This
  * class is likely to be converted to extend View directly in the future, so avoid using ImageView's
  * methods and properties.
+ *
+ * <p>This class has been deprecated. Please use VitoView instead.
  */
+@Deprecated
 public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
 
   private final AspectRatioMeasure.Spec mMeasureSpec = new AspectRatioMeasure.Spec();
@@ -48,6 +51,8 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   private boolean mLegacyVisibilityHandlingEnabled = false;
 
   private static boolean sGlobalLegacyVisibilityHandlingEnabled = false;
+
+  private @Nullable Object mExtraData = null;
 
   public static void setGlobalLegacyVisibilityHandlingEnabled(
       boolean legacyVisibilityHandlingEnabled) {
@@ -105,6 +110,14 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
     }
   }
 
+  public void setExtraData(@Nullable Object extraData) {
+    mExtraData = extraData;
+  }
+
+  public @Nullable Object getExtraData() {
+    return mExtraData;
+  }
+
   /** Sets the hierarchy. */
   public void setHierarchy(DH hierarchy) {
     mDraweeHolder.setHierarchy(hierarchy);
@@ -142,6 +155,10 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   /** Returns whether the controller is set or not. */
   public boolean hasController() {
     return mDraweeHolder.getController() != null;
+  }
+
+  public void resetActualImage() {
+    setController(null);
   }
 
   @Override
@@ -217,7 +234,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   @Deprecated
   public void setImageDrawable(@Nullable Drawable drawable) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageDrawable(drawable);
   }
 
@@ -230,7 +247,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   @Deprecated
   public void setImageBitmap(Bitmap bm) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageBitmap(bm);
   }
 
@@ -243,7 +260,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   @Deprecated
   public void setImageResource(int resId) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageResource(resId);
   }
 
@@ -256,7 +273,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   @Deprecated
   public void setImageURI(Uri uri) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageURI(uri);
   }
 

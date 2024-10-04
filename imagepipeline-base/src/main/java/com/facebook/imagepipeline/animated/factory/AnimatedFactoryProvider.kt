@@ -10,7 +10,6 @@ package com.facebook.imagepipeline.animated.factory
 import com.facebook.cache.common.CacheKey
 import com.facebook.common.executors.SerialExecutorService
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory
-import com.facebook.imagepipeline.cache.AnimatedCache
 import com.facebook.imagepipeline.cache.CountingMemoryCache
 import com.facebook.imagepipeline.core.ExecutorSupplier
 import com.facebook.imagepipeline.image.CloseableImage
@@ -25,8 +24,10 @@ object AnimatedFactoryProvider {
       platformBitmapFactory: PlatformBitmapFactory?,
       executorSupplier: ExecutorSupplier?,
       backingCache: CountingMemoryCache<CacheKey?, CloseableImage?>?,
-      animatedCache: AnimatedCache,
       downscaleFrameToDrawableDimensions: Boolean,
+      useBalancedAnimationStrategy: Boolean,
+      animationFpsLimit: Int,
+      bufferLengthMilliseconds: Int,
       serialExecutorService: ExecutorService?
   ): AnimatedFactory? {
     if (!implLoaded) {
@@ -37,16 +38,20 @@ object AnimatedFactoryProvider {
                 PlatformBitmapFactory::class.java,
                 ExecutorSupplier::class.java,
                 CountingMemoryCache::class.java,
-                AnimatedCache::class.java,
                 java.lang.Boolean.TYPE,
+                java.lang.Boolean.TYPE,
+                Integer.TYPE,
+                Integer.TYPE,
                 SerialExecutorService::class.java)
         impl =
             constructor.newInstance(
                 platformBitmapFactory,
                 executorSupplier,
                 backingCache,
-                animatedCache,
                 downscaleFrameToDrawableDimensions,
+                useBalancedAnimationStrategy,
+                animationFpsLimit,
+                bufferLengthMilliseconds,
                 serialExecutorService) as AnimatedFactory
       } catch (e: Throwable) {
         // Head in the sand

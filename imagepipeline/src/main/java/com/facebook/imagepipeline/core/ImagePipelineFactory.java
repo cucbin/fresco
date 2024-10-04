@@ -7,16 +7,13 @@
 
 package com.facebook.imagepipeline.core;
 
-import static com.facebook.common.util.ByteConstants.MB;
-
 import android.content.Context;
 import android.os.Build;
 import com.facebook.cache.common.CacheKey;
-import com.facebook.cache.disk.DiskCacheConfig;
-import com.facebook.cache.disk.FileCache;
 import com.facebook.common.internal.AndroidPredicates;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
+import com.facebook.common.internal.Supplier;
 import com.facebook.common.logging.FLog;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.imageformat.ImageFormatChecker;
@@ -24,8 +21,6 @@ import com.facebook.imagepipeline.animated.factory.AnimatedFactory;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactoryProvider;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactoryProvider;
-import com.facebook.imagepipeline.cache.AnimatedCache;
-import com.facebook.imagepipeline.cache.BufferedDiskCache;
 import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.cache.EncodedCountingMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.EncodedMemoryCacheFactory;
@@ -46,6 +41,7 @@ import com.facebook.imagepipeline.transcoder.ImageTranscoder;
 import com.facebook.imagepipeline.transcoder.ImageTranscoderFactory;
 import com.facebook.imagepipeline.transcoder.MultiImageTranscoderFactory;
 import com.facebook.imagepipeline.transcoder.SimpleImageTranscoderFactory;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -58,11 +54,12 @@ import javax.annotation.concurrent.NotThreadSafe;
  * applications create just one instance of this class and of the pipeline.
  */
 @NotThreadSafe
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ImagePipelineFactory {
 
   private static final Class<?> TAG = ImagePipelineFactory.class;
 
-  private static ImagePipelineFactory sInstance = null;
+  private static @Nullable ImagePipelineFactory sInstance = null;
   private static ImagePipeline sImagePipeline;
   private final ThreadHandoffProducerQueue mThreadHandoffProducerQueue;
   private static boolean sForceSingleInstance;
@@ -98,7 +95,9 @@ public class ImagePipelineFactory {
     if (sInstance != null) {
       FLog.w(
           TAG,
-          "ImagePipelineFactory has already been initialized! `ImagePipelineFactory.initialize(...)` should only be called once to avoid unexpected behavior.");
+          "ImagePipelineFactory has already been initialized!"
+              + " `ImagePipelineFactory.initialize(...)` should only be called once to avoid"
+              + " unexpected behavior.");
       if (sForceSingleInstance) {
         return;
       }
@@ -127,20 +126,15 @@ public class ImagePipelineFactory {
 
   private final ImagePipelineConfigInterface mConfig;
   private final CloseableReferenceFactory mCloseableReferenceFactory;
-  private CountingMemoryCache<CacheKey, CloseableImage> mBitmapCountingMemoryCache;
-  @Nullable private AnimatedCache mAnimatedCache;
+  private final Supplier<DiskCachesStore> mDiskCachesStoreSupplier;
+  @Nullable private CountingMemoryCache<CacheKey, CloseableImage> mBitmapCountingMemoryCache;
   @Nullable private InstrumentedMemoryCache<CacheKey, CloseableImage> mBitmapMemoryCache;
-  private CountingMemoryCache<CacheKey, PooledByteBuffer> mEncodedCountingMemoryCache;
+  @Nullable private CountingMemoryCache<CacheKey, PooledByteBuffer> mEncodedCountingMemoryCache;
   @Nullable private InstrumentedMemoryCache<CacheKey, PooledByteBuffer> mEncodedMemoryCache;
-  @Nullable private BufferedDiskCache mMainBufferedDiskCache;
-  @Nullable private FileCache mMainFileCache;
   @Nullable private ImageDecoder mImageDecoder;
   @Nullable private ImageTranscoderFactory mImageTranscoderFactory;
   @Nullable private ProducerFactory mProducerFactory;
   @Nullable private ProducerSequenceFactory mProducerSequenceFactory;
-  @Nullable private BufferedDiskCache mSmallImageBufferedDiskCache;
-  @Nullable private FileCache mSmallImageFileCache;
-
   @Nullable private PlatformBitmapFactory mPlatformBitmapFactory;
   @Nullable private PlatformDecoder mPlatformDecoder;
 
@@ -162,6 +156,7 @@ public class ImagePipelineFactory {
     if (FrescoSystrace.isTracing()) {
       FrescoSystrace.endSection();
     }
+    mDiskCachesStoreSupplier = mConfig.getDiskCachesStoreSupplier();
   }
 
   @Nullable
@@ -172,8 +167,10 @@ public class ImagePipelineFactory {
               getPlatformBitmapFactory(),
               mConfig.getExecutorSupplier(),
               getBitmapCountingMemoryCache(),
-              getAnimatedCache(80),
               mConfig.getExperiments().getDownscaleFrameToDrawableDimensions(),
+              mConfig.getExperiments().getUseBalancedAnimationStrategy(),
+              mConfig.getExperiments().getAnimationRenderFpsLimit(),
+              mConfig.getExperiments().getAnimationStrategyBufferLengthMilliseconds(),
               mConfig.getExecutorServiceForAnimatedImages());
     }
     return mAnimatedFactory;
@@ -199,15 +196,6 @@ public class ImagePipelineFactory {
                   mConfig.getBitmapMemoryCacheEntryStateObserver());
     }
     return mBitmapCountingMemoryCache;
-  }
-
-  public AnimatedCache getAnimatedCache(int memoryPercentage) {
-    if (mAnimatedCache == null) {
-      final long maxMemory = Math.min(Runtime.getRuntime().maxMemory(), Integer.MAX_VALUE);
-      long cacheSizeMb = (maxMemory / 100 * memoryPercentage) / MB;
-      mAnimatedCache = new AnimatedCache((int) cacheSizeMb);
-    }
-    return mAnimatedCache;
   }
 
   public InstrumentedMemoryCache<CacheKey, CloseableImage> getBitmapMemoryCache() {
@@ -277,26 +265,8 @@ public class ImagePipelineFactory {
     return mImageDecoder;
   }
 
-  public BufferedDiskCache getMainBufferedDiskCache() {
-    if (mMainBufferedDiskCache == null) {
-      mMainBufferedDiskCache =
-          new BufferedDiskCache(
-              getMainFileCache(),
-              mConfig.getPoolFactory().getPooledByteBufferFactory(mConfig.getMemoryChunkType()),
-              mConfig.getPoolFactory().getPooledByteStreams(),
-              mConfig.getExecutorSupplier().forLocalStorageRead(),
-              mConfig.getExecutorSupplier().forLocalStorageWrite(),
-              mConfig.getImageCacheStatsTracker());
-    }
-    return mMainBufferedDiskCache;
-  }
-
-  public FileCache getMainFileCache() {
-    if (mMainFileCache == null) {
-      DiskCacheConfig diskCacheConfig = mConfig.getMainDiskCacheConfig();
-      mMainFileCache = mConfig.getFileCacheFactory().get(diskCacheConfig);
-    }
-    return mMainFileCache;
+  public Supplier<DiskCachesStore> getDiskCachesStoreSupplier() {
+    return mDiskCachesStoreSupplier;
   }
 
   public ImagePipeline getImagePipeline() {
@@ -314,8 +284,7 @@ public class ImagePipelineFactory {
         mConfig.isPrefetchEnabledSupplier(),
         getBitmapMemoryCache(),
         getEncodedMemoryCache(),
-        getMainBufferedDiskCache(),
-        getSmallImageBufferedDiskCache(),
+        mDiskCachesStoreSupplier,
         mConfig.getCacheKeyFactory(),
         mThreadHandoffProducerQueue,
         mConfig.getExperiments().getSuppressBitmapPrefetchingSupplier(),
@@ -339,7 +308,8 @@ public class ImagePipelineFactory {
           PlatformDecoderFactory.buildPlatformDecoder(
               mConfig.getPoolFactory(),
               mConfig.getExperiments().isGingerbreadDecoderEnabled(),
-              mConfig.getExperiments().getShouldUseDecodingBufferHelper());
+              mConfig.getExperiments().getShouldUseDecodingBufferHelper(),
+              mConfig.getExperiments().getPlatformDecoderOptions());
     }
     return mPlatformDecoder;
   }
@@ -355,7 +325,7 @@ public class ImagePipelineFactory {
                   mConfig.getPoolFactory().getSmallByteArrayPool(),
                   getImageDecoder(),
                   mConfig.getProgressiveJpegConfig(),
-                  mConfig.isDownsampleEnabled(),
+                  mConfig.getDownsampleMode(),
                   mConfig.isResizeAndRotateEnabledForNetwork(),
                   mConfig.getExperiments().isDecodeCancellationEnabled(),
                   mConfig.getExecutorSupplier(),
@@ -363,14 +333,13 @@ public class ImagePipelineFactory {
                   mConfig.getPoolFactory().getPooledByteStreams(),
                   getBitmapMemoryCache(),
                   getEncodedMemoryCache(),
-                  getMainBufferedDiskCache(),
-                  getSmallImageBufferedDiskCache(),
+                  mDiskCachesStoreSupplier,
                   mConfig.getCacheKeyFactory(),
                   getPlatformBitmapFactory(),
                   mConfig.getExperiments().getBitmapPrepareToDrawMinSizeBytes(),
                   mConfig.getExperiments().getBitmapPrepareToDrawMaxSizeBytes(),
                   mConfig.getExperiments().getBitmapPrepareToDrawForPrefetch(),
-                  mConfig.getExperiments().getMaxBitmapSize(),
+                  mConfig.getExperiments().getMaxBitmapDimension(),
                   getCloseableReferenceFactory(),
                   mConfig.getExperiments().getKeepCancelledFetchAsLowPriority(),
                   mConfig.getExperiments().getTrackedKeysSize());
@@ -393,7 +362,7 @@ public class ImagePipelineFactory {
               mConfig.isResizeAndRotateEnabledForNetwork(),
               mConfig.getExperiments().isWebpSupportEnabled(),
               mThreadHandoffProducerQueue,
-              mConfig.isDownsampleEnabled(),
+              mConfig.getDownsampleMode(),
               useBitmapPrepareToDraw,
               mConfig.getExperiments().isPartialImageCachingEnabled(),
               mConfig.isDiskCacheEnabled(),
@@ -406,30 +375,8 @@ public class ImagePipelineFactory {
     return mProducerSequenceFactory;
   }
 
-  public FileCache getSmallImageFileCache() {
-    if (mSmallImageFileCache == null) {
-      DiskCacheConfig diskCacheConfig = mConfig.getSmallImageDiskCacheConfig();
-      mSmallImageFileCache = mConfig.getFileCacheFactory().get(diskCacheConfig);
-    }
-    return mSmallImageFileCache;
-  }
-
   public CloseableReferenceFactory getCloseableReferenceFactory() {
     return mCloseableReferenceFactory;
-  }
-
-  private BufferedDiskCache getSmallImageBufferedDiskCache() {
-    if (mSmallImageBufferedDiskCache == null) {
-      mSmallImageBufferedDiskCache =
-          new BufferedDiskCache(
-              getSmallImageFileCache(),
-              mConfig.getPoolFactory().getPooledByteBufferFactory(mConfig.getMemoryChunkType()),
-              mConfig.getPoolFactory().getPooledByteStreams(),
-              mConfig.getExecutorSupplier().forLocalStorageRead(),
-              mConfig.getExecutorSupplier().forLocalStorageWrite(),
-              mConfig.getImageCacheStatsTracker());
-    }
-    return mSmallImageBufferedDiskCache;
   }
 
   /**
@@ -446,11 +393,11 @@ public class ImagePipelineFactory {
           && mConfig.getImageTranscoderType() == null
           && mConfig.getExperiments().isNativeCodeDisabled()) {
         mImageTranscoderFactory =
-            new SimpleImageTranscoderFactory(mConfig.getExperiments().getMaxBitmapSize());
+            new SimpleImageTranscoderFactory(mConfig.getExperiments().getMaxBitmapDimension());
       } else {
         mImageTranscoderFactory =
             new MultiImageTranscoderFactory(
-                mConfig.getExperiments().getMaxBitmapSize(),
+                mConfig.getExperiments().getMaxBitmapDimension(),
                 mConfig.getExperiments().getUseDownsamplingRatioForResizing(),
                 mConfig.getImageTranscoderFactory(),
                 mConfig.getImageTranscoderType(),
@@ -462,9 +409,13 @@ public class ImagePipelineFactory {
 
   @Nullable
   public String reportData() {
-    return Objects.toStringHelper("ImagePipelineFactory")
-        .add("bitmapCountingMemoryCache", mBitmapCountingMemoryCache.getDebugData())
-        .add("encodedCountingMemoryCache", mEncodedCountingMemoryCache.getDebugData())
-        .toString();
+    Objects.ToStringHelper b = Objects.toStringHelper("ImagePipelineFactory");
+    if (mBitmapCountingMemoryCache != null) {
+      b.add("bitmapCountingMemoryCache", mBitmapCountingMemoryCache.getDebugData());
+    }
+    if (mEncodedCountingMemoryCache != null) {
+      b.add("encodedCountingMemoryCache", mEncodedCountingMemoryCache.getDebugData());
+    }
+    return b.toString();
   }
 }

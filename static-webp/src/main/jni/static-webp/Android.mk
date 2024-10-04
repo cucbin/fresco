@@ -11,16 +11,8 @@ LOCAL_SRC_FILES := \
 	webp_bitmapfactory.cpp \
 	decoded_image.cpp \
 	exceptions.cpp \
-	jpeg/jpeg_codec.cpp \
-	jpeg/jpeg_error_handler.cpp \
-	jpeg/jpeg_memory_io.cpp \
-	jpeg/jpeg_stream_wrappers.cpp \
-	png/png_codec.cpp \
-	png/png_stream_wrappers.cpp \
 	streams.cpp \
 	transformations.cpp \
-	webp/webp_codec.cpp \
-	WebpTranscoder.cpp \
   jni_helpers.cpp \
   webp.cpp \
 
@@ -36,16 +28,10 @@ LOCAL_LDLIBS := -latomic -llog -ljnigraphics
 LOCAL_LDFLAGS += $(FRESCO_CPP_LDFLAGS)
 
 LOCAL_SHARED_LIBRARIES += webp
-
-LOCAL_STATIC_LIBRARIES += fb_jpegturbo
-LOCAL_LDFLAGS += -Wl,--exclude-libs,libfb_jpegturbo.a
+LOCAL_SHARED_LIBRARIES += webpdemux
+LOCAL_SHARED_LIBRARIES += webpmux
 
 LOCAL_LDLIBS += -lz
 
-LOCAL_STATIC_LIBRARIES += fb_png
-LOCAL_LDFLAGS += -Wl,--exclude-libs,libfb_png.a
-
 include $(BUILD_SHARED_LIBRARY)
-$(call import-module,libpng-1.6.37)
-$(call import-module,libwebp-1.0.0)
-$(call import-module,libjpeg-turbo-1.5.3)
+$(call import-module,libwebp-1.3.2)

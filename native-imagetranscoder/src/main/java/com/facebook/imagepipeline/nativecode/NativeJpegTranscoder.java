@@ -8,13 +8,13 @@
 package com.facebook.imagepipeline.nativecode;
 
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.DEFAULT_JPEG_QUALITY;
-import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.INVERTED_EXIF_ORIENTATIONS;
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.MAX_QUALITY;
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.MAX_SCALE_NUMERATOR;
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.MIN_QUALITY;
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.MIN_SCALE_NUMERATOR;
 import static com.facebook.imagepipeline.transcoder.JpegTranscoderUtils.SCALE_DENOMINATOR;
 
+import android.graphics.ColorSpace;
 import android.media.ExifInterface;
 import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Closeables;
@@ -37,7 +37,7 @@ import java.io.OutputStream;
 import javax.annotation.Nullable;
 
 /** Transcoder for jpeg images, using native code and libjpeg-turbo library. */
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @DoNotStrip
 public class NativeJpegTranscoder implements ImageTranscoder {
   public static final String TAG = "NativeJpegTranscoder";
@@ -90,7 +90,8 @@ public class NativeJpegTranscoder implements ImageTranscoder {
       @Nullable RotationOptions rotationOptions,
       @Nullable final ResizeOptions resizeOptions,
       @Nullable ImageFormat outputFormat,
-      @Nullable Integer quality)
+      @Nullable Integer quality,
+      @Nullable ColorSpace colorSpace)
       throws IOException {
     if (quality == null) {
       quality = DEFAULT_JPEG_QUALITY;
@@ -115,7 +116,8 @@ public class NativeJpegTranscoder implements ImageTranscoder {
         numerator = softwareNumerator;
       }
       is = encodedImage.getInputStream();
-      if (INVERTED_EXIF_ORIENTATIONS.contains(encodedImage.getExifOrientation())) {
+      if (JpegTranscoderUtils.INVERTED_EXIF_ORIENTATIONS.contains(
+          encodedImage.getExifOrientation())) {
         // Use exif orientation to rotate since we can't use the rotation angle for
         // inverted exif orientations
         final int exifOrientation =

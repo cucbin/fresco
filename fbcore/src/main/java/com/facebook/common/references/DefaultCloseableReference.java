@@ -12,13 +12,15 @@ import com.facebook.common.logging.FLog;
 import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DefaultCloseableReference<T> extends CloseableReference<T> {
 
   private static final String TAG = "DefaultCloseableReference";
 
   private DefaultCloseableReference(
-      SharedReference<T> sharedReference, LeakHandler leakHandler, @Nullable Throwable stacktrace) {
+      SharedReference<T> sharedReference,
+      @Nullable LeakHandler leakHandler,
+      @Nullable Throwable stacktrace) {
     super(sharedReference, leakHandler, stacktrace);
   }
 
@@ -34,7 +36,7 @@ public class DefaultCloseableReference<T> extends CloseableReference<T> {
   public CloseableReference<T> clone() {
     Preconditions.checkState(isValid());
     return new DefaultCloseableReference<T>(
-        mSharedReference, mLeakHandler, mStacktrace != null ? new Throwable(mStacktrace) : null);
+        mSharedReference, mLeakHandler, mStacktrace != null ? new Throwable() : null);
   }
 
   @Override
@@ -56,7 +58,9 @@ public class DefaultCloseableReference<T> extends CloseableReference<T> {
           System.identityHashCode(mSharedReference),
           ref == null ? null : ref.getClass().getName());
 
-      mLeakHandler.reportLeak((SharedReference<Object>) mSharedReference, mStacktrace);
+      if (mLeakHandler != null) {
+        mLeakHandler.reportLeak((SharedReference<Object>) mSharedReference, mStacktrace);
+      }
 
       close();
     } finally {

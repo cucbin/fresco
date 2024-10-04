@@ -6,10 +6,12 @@
  */
 
 object FrescoConfig {
-  const val buildToolsVersion = "30.0.2"
+  const val buildToolsVersion = "34.0.0"
 
-  const val compileSdkVersion = 29
-  const val minSdkVersion = 14
-  const val samplesMinSdkVersion = 15
-  const val targetSdkVersion = 28
+  const val compileSdkVersion = 34
+  const val minSdkVersion = 21
+  const val flipperPluginMinSdkVersion = 21
+  const val vitoLithoMinSdkVersion = 21
+  const val samplesMinSdkVersion = 21
+  const val targetSdkVersion = 34
 }

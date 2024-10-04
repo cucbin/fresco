@@ -9,7 +9,6 @@ package com.facebook.imagepipeline.image;
 
 import android.graphics.ColorSpace;
 import android.media.ExifInterface;
-import android.util.Pair;
 import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
@@ -27,12 +26,14 @@ import com.facebook.imageutils.ImageMetaData;
 import com.facebook.imageutils.JfifUtil;
 import com.facebook.imageutils.WebpUtil;
 import com.facebook.infer.annotation.FalseOnNull;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.Closeable;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+import kotlin.Pair;
 
 /**
  * Class that contains all the information for an encoded image, both the image bytes (held on a
@@ -46,6 +47,7 @@ import javax.annotation.concurrent.Immutable;
  *
  * <p>Currently the data is useful for rotation and resize.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @Immutable
 public class EncodedImage implements Closeable {
   public static final int UNKNOWN_ROTATION_ANGLE = -1;
@@ -140,6 +142,7 @@ public class EncodedImage implements Closeable {
    * <p>The caller has to close the reference once it has finished using it.
    */
   public CloseableReference<PooledByteBuffer> getByteBufferRef() {
+    // NULLSAFE_FIXME[Return Not Nullable]
     return CloseableReference.cloneOrNull(mPooledByteBufferRef);
   }
 
@@ -293,6 +296,9 @@ public class EncodedImage implements Closeable {
     // The image should be backed by a ByteBuffer
     Preconditions.checkNotNull(mPooledByteBufferRef);
     PooledByteBuffer buf = mPooledByteBufferRef.get();
+    if (length < 2) {
+      return false;
+    }
     return (buf.read(length - 2) == (byte) JfifUtil.MARKER_FIRST_BYTE)
         && (buf.read(length - 1) == (byte) JfifUtil.MARKER_EOI);
   }
@@ -362,6 +368,7 @@ public class EncodedImage implements Closeable {
   /** Sets the encoded image meta data. */
   private void internalParseMetaData() {
     final ImageFormat imageFormat =
+        // NULLSAFE_FIXME[Parameter Not Nullable]
         ImageFormatChecker.getImageFormat_WrapIOException(getInputStream());
     mImageFormat = imageFormat;
     // BitmapUtil.decodeDimensions has a bug where it will return 100x100 for some WebPs even though
@@ -375,6 +382,7 @@ public class EncodedImage implements Closeable {
     if (imageFormat == DefaultImageFormats.JPEG && mRotationAngle == UNKNOWN_ROTATION_ANGLE) {
       // Load the JPEG rotation angle only if we have the dimensions
       if (dimensions != null) {
+        // NULLSAFE_FIXME[Parameter Not Nullable]
         mExifOrientation = JfifUtil.getOrientation(getInputStream());
         mRotationAngle = JfifUtil.getAutoRotateAngleFromOrientation(mExifOrientation);
       }
@@ -390,10 +398,15 @@ public class EncodedImage implements Closeable {
   /** We get the size from a WebP image */
   @Nullable
   private Pair<Integer, Integer> readWebPImageSize() {
-    final Pair<Integer, Integer> dimensions = WebpUtil.getSize(getInputStream());
+    final InputStream stream = getInputStream();
+    if (stream == null) {
+      return null;
+    }
+
+    final Pair<Integer, Integer> dimensions = WebpUtil.getSize(stream);
     if (dimensions != null) {
-      mWidth = dimensions.first;
-      mHeight = dimensions.second;
+      mWidth = dimensions.component1();
+      mHeight = dimensions.component2();
     }
     return dimensions;
   }
@@ -408,8 +421,8 @@ public class EncodedImage implements Closeable {
       mColorSpace = metaData.getColorSpace();
       Pair<Integer, Integer> dimensions = metaData.getDimensions();
       if (dimensions != null) {
-        mWidth = dimensions.first;
-        mHeight = dimensions.second;
+        mWidth = dimensions.component1();
+        mHeight = dimensions.component2();
       }
     } finally {
       if (inputStream != null) {

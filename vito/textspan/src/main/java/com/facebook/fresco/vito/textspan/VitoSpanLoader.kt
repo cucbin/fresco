@@ -9,6 +9,7 @@ package com.facebook.fresco.vito.textspan
 
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
+import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.view.View
@@ -37,6 +38,7 @@ object VitoSpanLoader {
   fun show(
       imageSource: ImageSource,
       imageOptions: ImageOptions,
+      logWithHighSamplingRate: Boolean = false,
       callerContext: Any?,
       contextChain: ContextChain?,
       imageListener: ImageListener?,
@@ -44,7 +46,8 @@ object VitoSpanLoader {
   ) {
     show(
         FrescoVitoProvider.getImagePipeline()
-            .createImageRequest(target.resources, imageSource, imageOptions),
+            .createImageRequest(
+                target.resources, imageSource, imageOptions, logWithHighSamplingRate),
         callerContext,
         contextChain,
         imageListener,
@@ -62,13 +65,13 @@ object VitoSpanLoader {
     val fetchCommand = {
       FrescoVitoProvider.getController()
           .fetch(
-              target.drawableInterface,
-              imageRequest,
-              callerContext,
-              contextChain,
-              imageListener,
-              null,
-              null)
+              drawable = target.drawableInterface,
+              imageRequest = imageRequest,
+              callerContext = callerContext,
+              contextChain = contextChain,
+              listener = imageListener,
+              onFadeListener = null,
+              viewportDimensions = null)
     }
     target.imageFetchCommand = fetchCommand
     fetchCommand()
@@ -81,7 +84,7 @@ object VitoSpanLoader {
 
   @JvmStatic
   fun setImageSpanOnBuilder(
-      sb: SpannableStringBuilder,
+      sb: Spannable,
       imageSpan: VitoSpan,
       startIndex: Int,
       endIndex: Int,

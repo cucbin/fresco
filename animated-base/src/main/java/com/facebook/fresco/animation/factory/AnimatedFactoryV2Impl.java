@@ -27,7 +27,6 @@ import com.facebook.imagepipeline.animated.impl.AnimatedDrawableBackendImpl;
 import com.facebook.imagepipeline.animated.impl.AnimatedDrawableBackendProvider;
 import com.facebook.imagepipeline.animated.util.AnimatedDrawableUtil;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
-import com.facebook.imagepipeline.cache.AnimatedCache;
 import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.common.ImageDecodeOptions;
 import com.facebook.imagepipeline.core.ExecutorSupplier;
@@ -47,34 +46,38 @@ import javax.annotation.concurrent.NotThreadSafe;
 public class AnimatedFactoryV2Impl implements AnimatedFactory {
 
   private static final int NUMBER_OF_FRAMES_TO_PREPARE = 3;
-
   private final PlatformBitmapFactory mPlatformBitmapFactory;
   private final ExecutorSupplier mExecutorSupplier;
   private final CountingMemoryCache<CacheKey, CloseableImage> mBackingCache;
   private final boolean mDownscaleFrameToDrawableDimensions;
-  private final Supplier<Boolean> useNewBitmapRender = Suppliers.BOOLEAN_FALSE;
 
   private @Nullable AnimatedImageFactory mAnimatedImageFactory;
   private @Nullable AnimatedDrawableBackendProvider mAnimatedDrawableBackendProvider;
   private @Nullable AnimatedDrawableUtil mAnimatedDrawableUtil;
   private @Nullable DrawableFactory mAnimatedDrawableFactory;
   private @Nullable SerialExecutorService mSerialExecutorService;
-  private final AnimatedCache mAnimatedCache;
+  private int mAnimationFpsLimit;
+  private final boolean mUseBufferLoaderStrategy;
+  private int mBufferLengthMilliseconds;
 
   @DoNotStrip
   public AnimatedFactoryV2Impl(
       PlatformBitmapFactory platformBitmapFactory,
       ExecutorSupplier executorSupplier,
       CountingMemoryCache<CacheKey, CloseableImage> backingCache,
-      AnimatedCache animatedCache,
       boolean downscaleFrameToDrawableDimensions,
-      SerialExecutorService serialExecutorServiceForFramePreparing) {
+      boolean useBufferLoaderStrategy,
+      int animationFpsLimit,
+      int bufferLengthMilliseconds,
+      @Nullable SerialExecutorService serialExecutorServiceForFramePreparing) {
     mPlatformBitmapFactory = platformBitmapFactory;
     mExecutorSupplier = executorSupplier;
     mBackingCache = backingCache;
-    mAnimatedCache = animatedCache;
+    mAnimationFpsLimit = animationFpsLimit;
+    mUseBufferLoaderStrategy = useBufferLoaderStrategy;
     mDownscaleFrameToDrawableDimensions = downscaleFrameToDrawableDimensions;
     mSerialExecutorService = serialExecutorServiceForFramePreparing;
+    mBufferLengthMilliseconds = bufferLengthMilliseconds;
   }
 
   @Nullable
@@ -119,7 +122,6 @@ public class AnimatedFactoryV2Impl implements AnimatedFactory {
     Supplier<Integer> numberOfFramesToPrepareSupplier = () -> NUMBER_OF_FRAMES_TO_PREPARE;
 
     final Supplier<Boolean> useDeepEquals = Suppliers.BOOLEAN_FALSE;
-    final Supplier<AnimatedCache> animatedCacheSupplier = () -> mAnimatedCache;
 
     return new DefaultBitmapAnimationDrawableFactory(
         getAnimatedDrawableBackendProvider(),
@@ -128,11 +130,13 @@ public class AnimatedFactoryV2Impl implements AnimatedFactory {
         RealtimeSinceBootClock.get(),
         mPlatformBitmapFactory,
         mBackingCache,
-        animatedCacheSupplier,
         cachingStrategySupplier,
         numberOfFramesToPrepareSupplier,
         useDeepEquals,
-        useNewBitmapRender);
+        Suppliers.of(mUseBufferLoaderStrategy),
+        Suppliers.of(mDownscaleFrameToDrawableDimensions),
+        Suppliers.of(mAnimationFpsLimit),
+        Suppliers.of(mBufferLengthMilliseconds));
   }
 
   private AnimatedDrawableUtil getAnimatedDrawableUtil() {
@@ -181,6 +185,6 @@ public class AnimatedFactoryV2Impl implements AnimatedFactory {
           }
         };
     return new AnimatedImageFactoryImpl(
-        animatedDrawableBackendProvider, mPlatformBitmapFactory, useNewBitmapRender.get());
+        animatedDrawableBackendProvider, mPlatformBitmapFactory, mUseBufferLoaderStrategy);
   }
 }

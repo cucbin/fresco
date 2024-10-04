@@ -8,17 +8,12 @@
 package com.facebook.common.references;
 
 import com.facebook.infer.annotation.Nullsafe;
-import javax.annotation.Nullable;
 
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class NoOpCloseableReference<T> extends CloseableReference<T> {
 
-  /*package*/ NoOpCloseableReference(
-      T t,
-      ResourceReleaser<T> resourceReleaser,
-      LeakHandler leakHandler,
-      @Nullable Throwable stacktrace) {
-    super(t, resourceReleaser, leakHandler, stacktrace, false);
+  /*package*/ NoOpCloseableReference(T t) {
+    super(t, null, null, null, false);
   }
 
   @Override
@@ -28,7 +23,19 @@ public class NoOpCloseableReference<T> extends CloseableReference<T> {
   }
 
   @Override
+  public CloseableReference<T> cloneOrNull() {
+    // No ref counting
+    return this;
+  }
+
+  @Override
   public void close() {
     // Nop
+  }
+
+  @Override
+  public boolean isValid() {
+    // Always valid
+    return true;
   }
 }

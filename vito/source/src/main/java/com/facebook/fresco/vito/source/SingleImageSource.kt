@@ -9,4 +9,9 @@ package com.facebook.fresco.vito.source
 
 import android.net.Uri
 
-data class SingleImageSource(val uri: Uri) : ImageSource
+@Suppress("KtDataClass")
+interface SingleImageSource : UriImageSource {
+  val uri: Uri
+
+  fun getStringExtra(key: String): String?
+}

@@ -9,16 +9,19 @@
 
 namespace facebook {
 namespace imagepipeline {
+namespace webp {
 
 int bytesPerPixel(PixelFormat pixel_format) {
   switch (pixel_format) {
-  case PixelFormat::RGB:
-    return 3;
-  case PixelFormat::RGBA:
-    return 4;
-  default:
-    return 0;
+    case PixelFormat::RGB:
+      return 3;
+    case PixelFormat::RGBA:
+      return 4;
+    default:
+      return 0;
   }
 }
 
-} }
+} // namespace webp
+} // namespace imagepipeline
+} // namespace facebook

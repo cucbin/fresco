@@ -7,7 +7,7 @@
 
 package com.facebook.imagepipeline.request;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import android.net.Uri;
 import com.facebook.imagepipeline.common.ImageDecodeOptionsBuilder;
@@ -48,6 +48,34 @@ public class ImageRequestTest {
     ImageRequest copy = ImageRequestBuilder.fromRequest(original).build();
 
     assertThat(copy).isEqualTo(original);
+  }
+
+  @Test
+  public void testCreatingRequestWithDynamicCacheChoice_success() {
+    ImageRequest request =
+        ImageRequestBuilder.newBuilderWithSource(Uri.parse("http://frescolib.org/image.jpg"))
+            .setCacheChoice(ImageRequest.CacheChoice.DYNAMIC)
+            .setDiskCacheId("dynamic_cache_id")
+            .setImageDecodeOptions(new ImageDecodeOptionsBuilder().build())
+            .setLocalThumbnailPreviewsEnabled(true)
+            .setLowestPermittedRequestLevel(ImageRequest.RequestLevel.DISK_CACHE)
+            .setPostprocessor(
+                new BasePostprocessor() {
+                  @Override
+                  public String getName() {
+                    return super.getName();
+                  }
+                })
+            .setProgressiveRenderingEnabled(true)
+            .setRequestListener(new RequestLoggingListener())
+            .setResizeOptions(new ResizeOptions(20, 20))
+            .setRotationOptions(RotationOptions.forceRotation(RotationOptions.ROTATE_90))
+            .setRequestPriority(Priority.HIGH)
+            .build();
+
+    assertThat(request).isNotNull();
+    assertThat(request.getCacheChoice()).isEqualTo(ImageRequest.CacheChoice.DYNAMIC);
+    assertThat(request.getDiskCacheId()).isEqualTo("dynamic_cache_id");
   }
 
   @Test

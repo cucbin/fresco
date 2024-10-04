@@ -11,6 +11,7 @@ import com.facebook.common.internal.Closeables;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.memory.PooledByteBufferFactory;
 import com.facebook.common.references.CloseableReference;
+import com.facebook.fresco.middleware.HasExtraData;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.infer.annotation.Nullsafe;
@@ -20,7 +21,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** Represents a local fetch producer. */
-@Nullsafe(Nullsafe.Mode.STRICT)
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public abstract class LocalFetchProducer implements Producer<EncodedImage> {
 
   private final Executor mExecutor;
@@ -38,7 +39,7 @@ public abstract class LocalFetchProducer implements Producer<EncodedImage> {
     final ProducerListener2 listener = producerContext.getProducerListener();
     final ImageRequest imageRequest = producerContext.getImageRequest();
     producerContext.putOriginExtra("local", "fetch");
-    final StatefulProducerRunnable cancellableProducerRunnable =
+    final StatefulProducerRunnable<EncodedImage> cancellableProducerRunnable =
         new StatefulProducerRunnable<EncodedImage>(
             consumer, listener, producerContext, getProducerName()) {
 
@@ -47,18 +48,18 @@ public abstract class LocalFetchProducer implements Producer<EncodedImage> {
             EncodedImage encodedImage = LocalFetchProducer.this.getEncodedImage(imageRequest);
             if (encodedImage == null) {
               listener.onUltimateProducerReached(producerContext, getProducerName(), false);
-              producerContext.putOriginExtra("local");
+              producerContext.putOriginExtra("local", "fetch");
               return null;
             }
             encodedImage.parseMetaData();
             listener.onUltimateProducerReached(producerContext, getProducerName(), true);
-            producerContext.putOriginExtra("local");
+            producerContext.putOriginExtra("local", "fetch");
+            producerContext.putExtra(HasExtraData.KEY_COLOR_SPACE, encodedImage.getColorSpace());
             return encodedImage;
           }
 
           @Override
-          // NULLSAFE_FIXME[Inconsistent Subclass Parameter Annotation]
-          protected void disposeResult(EncodedImage result) {
+          protected void disposeResult(@Nullable EncodedImage result) {
             EncodedImage.closeSafely(result);
           }
         };
@@ -104,6 +105,8 @@ public abstract class LocalFetchProducer implements Producer<EncodedImage> {
   protected abstract @Nullable EncodedImage getEncodedImage(ImageRequest imageRequest)
       throws IOException;
 
-  /** @return name of the Producer */
+  /**
+   * @return name of the Producer
+   */
   protected abstract String getProducerName();
 }

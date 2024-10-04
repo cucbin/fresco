@@ -19,12 +19,15 @@ import com.facebook.common.internal.Preconditions;
 import com.facebook.common.logging.FLog;
 import com.facebook.common.memory.DecodeBufferHelper;
 import com.facebook.common.references.CloseableReference;
+import com.facebook.common.references.ResourceReleaser;
 import com.facebook.common.streams.LimitedInputStream;
 import com.facebook.common.streams.TailAppendingInputStream;
 import com.facebook.imagepipeline.bitmaps.SimpleBitmapReleaser;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.memory.BitmapPool;
+import com.facebook.imagepipeline.memory.DummyBitmapPool;
 import com.facebook.imageutils.JfifUtil;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -33,11 +36,14 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /** Bitmap decoder for ART VM (Lollipop and up). */
 @ThreadSafe
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public abstract class DefaultDecoder implements PlatformDecoder {
 
   private static final Class<?> TAG = DefaultDecoder.class;
 
   private final BitmapPool mBitmapPool;
+  private boolean mAvoidPoolGet;
+  private boolean mAvoidPoolRelease;
 
   private final @Nullable PreverificationHelper mPreverificationHelper;
 
@@ -56,19 +62,26 @@ public abstract class DefaultDecoder implements PlatformDecoder {
   private static final byte[] EOI_TAIL =
       new byte[] {(byte) JfifUtil.MARKER_FIRST_BYTE, (byte) JfifUtil.MARKER_EOI};
 
-  public DefaultDecoder(BitmapPool bitmapPool, Pools.Pool<ByteBuffer> decodeBuffers) {
+  public DefaultDecoder(
+      BitmapPool bitmapPool,
+      Pools.Pool<ByteBuffer> decodeBuffers,
+      PlatformDecoderOptions platformDecoderOptions) {
     mBitmapPool = bitmapPool;
+    if (bitmapPool instanceof DummyBitmapPool) {
+      mAvoidPoolGet = platformDecoderOptions.getAvoidPoolGet();
+      mAvoidPoolRelease = platformDecoderOptions.getAvoidPoolRelease();
+    }
     mDecodeBuffers = decodeBuffers;
   }
 
   @Override
-  public CloseableReference<Bitmap> decodeFromEncodedImage(
+  public @Nullable CloseableReference<Bitmap> decodeFromEncodedImage(
       EncodedImage encodedImage, Bitmap.Config bitmapConfig, @Nullable Rect regionToDecode) {
     return decodeFromEncodedImageWithColorSpace(encodedImage, bitmapConfig, regionToDecode, null);
   }
 
   @Override
-  public CloseableReference<Bitmap> decodeJPEGFromEncodedImage(
+  public @Nullable CloseableReference<Bitmap> decodeJPEGFromEncodedImage(
       EncodedImage encodedImage,
       Bitmap.Config bitmapConfig,
       @Nullable Rect regionToDecode,
@@ -91,12 +104,13 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    * @exception java.lang.OutOfMemoryError if the Bitmap cannot be allocated
    */
   @Override
-  public CloseableReference<Bitmap> decodeFromEncodedImageWithColorSpace(
+  public @Nullable CloseableReference<Bitmap> decodeFromEncodedImageWithColorSpace(
       EncodedImage encodedImage,
       Bitmap.Config bitmapConfig,
       @Nullable Rect regionToDecode,
       @Nullable final ColorSpace colorSpace) {
-    final BitmapFactory.Options options = getDecodeOptionsForStream(encodedImage, bitmapConfig);
+    final BitmapFactory.Options options =
+        getDecodeOptionsForStream(encodedImage, bitmapConfig, mAvoidPoolGet);
     boolean retryOnFail = options.inPreferredConfig != Bitmap.Config.ARGB_8888;
     try {
       InputStream s = Preconditions.checkNotNull(encodedImage.getInputStream());
@@ -125,14 +139,15 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    * @exception java.lang.OutOfMemoryError if the Bitmap cannot be allocated
    */
   @Override
-  public CloseableReference<Bitmap> decodeJPEGFromEncodedImageWithColorSpace(
+  public @Nullable CloseableReference<Bitmap> decodeJPEGFromEncodedImageWithColorSpace(
       EncodedImage encodedImage,
       Bitmap.Config bitmapConfig,
       @Nullable Rect regionToDecode,
       int length,
       @Nullable final ColorSpace colorSpace) {
     boolean isJpegComplete = encodedImage.isCompleteAt(length);
-    final BitmapFactory.Options options = getDecodeOptionsForStream(encodedImage, bitmapConfig);
+    final BitmapFactory.Options options =
+        getDecodeOptionsForStream(encodedImage, bitmapConfig, mAvoidPoolGet);
     InputStream jpegDataStream = encodedImage.getInputStream();
     // At this point the InputStream from the encoded image should not be null since in the
     // pipeline,this comes from a call stack where this was checked before. Also this method needs
@@ -170,7 +185,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    * @param regionToDecode optional image region to decode or null to decode the whole image
    * @return the bitmap
    */
-  protected CloseableReference<Bitmap> decodeStaticImageFromStream(
+  protected @Nullable CloseableReference<Bitmap> decodeStaticImageFromStream(
       InputStream inputStream, BitmapFactory.Options options, @Nullable Rect regionToDecode) {
     return decodeFromStream(inputStream, options, regionToDecode, null);
   }
@@ -186,7 +201,7 @@ public abstract class DefaultDecoder implements PlatformDecoder {
    *     assumed if the SDK version >= 26.
    * @return the bitmap
    */
-  private CloseableReference<Bitmap> decodeFromStream(
+  private @Nullable CloseableReference<Bitmap> decodeFromStream(
       InputStream inputStream,
       BitmapFactory.Options options,
       @Nullable Rect regionToDecode,
@@ -213,10 +228,12 @@ public abstract class DefaultDecoder implements PlatformDecoder {
         // If region decoding was requested we need to fallback to default config
         options.inPreferredConfig = Bitmap.Config.ARGB_8888;
       }
-      final int sizeInBytes = getBitmapSize(targetWidth, targetHeight, options);
-      bitmapToReuse = mBitmapPool.get(sizeInBytes);
-      if (bitmapToReuse == null) {
-        throw new NullPointerException("BitmapPool.get returned null");
+      if (!mAvoidPoolGet) {
+        final int sizeInBytes = getBitmapSize(targetWidth, targetHeight, options);
+        bitmapToReuse = mBitmapPool.get(sizeInBytes);
+        if (bitmapToReuse == null) {
+          throw new NullPointerException("BitmapPool.get returned null");
+        }
       }
     }
     // inBitmap can be nullable
@@ -238,12 +255,15 @@ public abstract class DefaultDecoder implements PlatformDecoder {
       options.inTempStorage = byteBuffer.array();
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
           && regionToDecode != null
-          && bitmapToReuse != null) {
+          && bitmapToReuse != null
+          && options.inPreferredConfig != null) {
         BitmapRegionDecoder bitmapRegionDecoder = null;
         try {
           bitmapToReuse.reconfigure(targetWidth, targetHeight, options.inPreferredConfig);
           bitmapRegionDecoder = BitmapRegionDecoder.newInstance(inputStream, true);
-          decodedBitmap = bitmapRegionDecoder.decodeRegion(regionToDecode, options);
+          if (bitmapRegionDecoder != null) {
+            decodedBitmap = bitmapRegionDecoder.decodeRegion(regionToDecode, options);
+          }
         } catch (IOException e) {
           FLog.e(TAG, "Could not decode region %s, decoding full bitmap instead.", regionToDecode);
         } finally {
@@ -288,35 +308,58 @@ public abstract class DefaultDecoder implements PlatformDecoder {
     // expected
     if (bitmapToReuse != null && bitmapToReuse != decodedBitmap) {
       mBitmapPool.release(bitmapToReuse);
-      decodedBitmap.recycle();
+      if (decodedBitmap != null) {
+        decodedBitmap.recycle();
+      }
       throw new IllegalStateException();
     }
 
-    return CloseableReference.of(decodedBitmap, mBitmapPool);
+    if (mAvoidPoolRelease) {
+      return CloseableReference.of(decodedBitmap, NoOpResourceReleaser.INSTANCE);
+    } else {
+      return CloseableReference.of(decodedBitmap, mBitmapPool);
+    }
   }
 
   /**
    * Options returned by this method are configured with mDecodeBuffer which is GuardedBy("this")
    */
   private static BitmapFactory.Options getDecodeOptionsForStream(
-      EncodedImage encodedImage, Bitmap.Config bitmapConfig) {
+      EncodedImage encodedImage, Bitmap.Config bitmapConfig, boolean skipDecoding) {
     final BitmapFactory.Options options = new BitmapFactory.Options();
     // Sample size should ONLY be different than 1 when downsampling is enabled in the pipeline
     options.inSampleSize = encodedImage.getSampleSize();
     options.inJustDecodeBounds = true;
-    // fill outWidth and outHeight
-    BitmapFactory.decodeStream(encodedImage.getInputStream(), null, options);
-    if (options.outWidth == -1 || options.outHeight == -1) {
-      throw new IllegalArgumentException();
-    }
-
-    options.inJustDecodeBounds = false;
     options.inDither = true;
-    options.inPreferredConfig = bitmapConfig;
+    boolean isHardwareBitmap =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmapConfig == Bitmap.Config.HARDWARE;
+    if (!isHardwareBitmap) {
+      options.inPreferredConfig = bitmapConfig;
+    }
     options.inMutable = true;
+    if (!skipDecoding) {
+      // fill outWidth and outHeight
+      BitmapFactory.decodeStream(encodedImage.getInputStream(), null, options);
+      if (options.outWidth == -1 || options.outHeight == -1) {
+        throw new IllegalArgumentException();
+      }
+    }
+    if (isHardwareBitmap) {
+      options.inPreferredConfig = bitmapConfig;
+    }
+    options.inJustDecodeBounds = false;
     return options;
   }
 
   public abstract int getBitmapSize(
       final int width, final int height, final BitmapFactory.Options options);
+
+  private static final class NoOpResourceReleaser implements ResourceReleaser<Bitmap> {
+    private static final NoOpResourceReleaser INSTANCE = new NoOpResourceReleaser();
+
+    @Override
+    public void release(Bitmap value) {
+      // NoOp
+    }
+  }
 }

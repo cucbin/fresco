@@ -7,6 +7,7 @@
 
 package com.facebook.imagepipeline.backends.okhttp3
 
+import android.os.Build
 import android.os.Looper
 import android.os.SystemClock
 import com.facebook.imagepipeline.backends.okhttp3.OkHttpNetworkFetcher.OkHttpNetworkFetchState
@@ -22,6 +23,7 @@ import com.facebook.imagepipeline.producers.ProducerContext
 import java.io.IOException
 import java.lang.Exception
 import java.util.concurrent.Executor
+import kotlin.collections.Map
 import okhttp3.CacheControl
 import okhttp3.Call
 import okhttp3.Callback
@@ -32,9 +34,10 @@ import okhttp3.ResponseBody
 
 /**
  * Network fetcher that uses OkHttp 3 as a backend.
+ *
  * @param callFactory custom [Call.Factory] for fetching image from the network
  * @param cancellationExecutor executor on which fetching cancellation is performed if cancellation
- * is requested from the UI Thread
+ *   is requested from the UI Thread
  * @param disableOkHttpCache true if network requests should not be cached by OkHttp
  */
 open class OkHttpNetworkFetcher
@@ -88,14 +91,17 @@ constructor(
     fetchState.fetchCompleteTime = SystemClock.elapsedRealtime()
   }
 
-  override fun getExtraMap(fetchState: OkHttpNetworkFetchState, byteSize: Int) =
+  override fun getExtraMap(
+      fetchState: OkHttpNetworkFetchState,
+      byteSize: Int
+  ): Map<String, String>? =
       mapOf(
           QUEUE_TIME to (fetchState.responseTime - fetchState.submitTime).toString(),
           FETCH_TIME to (fetchState.fetchCompleteTime - fetchState.responseTime).toString(),
           TOTAL_TIME to (fetchState.fetchCompleteTime - fetchState.submitTime).toString(),
           IMAGE_SIZE to byteSize.toString())
 
-  protected fun fetchWithRequest(
+  protected open fun fetchWithRequest(
       fetchState: OkHttpNetworkFetchState,
       callback: NetworkFetcher.Callback,
       request: Request
@@ -120,7 +126,10 @@ constructor(
             responseBody?.use { body ->
               try {
                 if (!response.isSuccessful) {
-                  handleException(call, IOException("Unexpected HTTP code $response"), callback)
+                  handleException(
+                      call,
+                      makeExceptionFromResponse("Unexpected HTTP code $response", response),
+                      callback)
                   return@use
                 }
                 val responseRange = fromContentRangeHeader(response.header("Content-Range"))
@@ -139,12 +148,22 @@ constructor(
                 handleException(call, e, callback)
               }
             }
-                ?: handleException(call, IOException("Response body null: $response"), callback)
+                ?: handleException(
+                    call,
+                    makeExceptionFromResponse("Response body null: $response", response),
+                    callback)
           }
 
           override fun onFailure(call: Call, e: IOException) = handleException(call, e, callback)
         })
   }
+
+  private fun makeExceptionFromResponse(message: String, response: Response): IOException =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
+        IOException(message, OkHttpNetworkFetcherException.fromResponse(response))
+      } else {
+        IOException(message)
+      }
 
   /**
    * Handles exceptions.

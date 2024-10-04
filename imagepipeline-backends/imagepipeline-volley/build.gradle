@@ -6,6 +6,7 @@
  */
 
 import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
 
 apply plugin: 'com.android.library'
 
@@ -18,12 +19,17 @@ dependencies {
   implementation project(':memory-types:ashmem')
   implementation project(':memory-types:nativememory')
   implementation project(':memory-types:simple')
-  implementation project(':imagepipeline-base')
+    implementation project(':middleware')
+    implementation project(':imagepipeline-base')
 }
 
 android {
+    ndkVersion GradleDeps.Native.version
+
     buildToolsVersion FrescoConfig.buildToolsVersion
     compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.imagepipeline.backends.volley"
 
     defaultConfig {
         minSdkVersion FrescoConfig.minSdkVersion

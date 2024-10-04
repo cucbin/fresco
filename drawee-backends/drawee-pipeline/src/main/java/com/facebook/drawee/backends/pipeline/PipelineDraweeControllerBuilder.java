@@ -12,15 +12,14 @@ import android.net.Uri;
 import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.ImmutableList;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.Suppliers;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawee.backends.pipeline.info.ImageOriginListener;
-import com.facebook.drawee.backends.pipeline.info.ImagePerfDataListener;
 import com.facebook.drawee.controller.AbstractDraweeControllerBuilder;
 import com.facebook.drawee.controller.ControllerListener;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.fresco.ui.common.ControllerListener2;
+import com.facebook.fresco.ui.common.ImagePerfDataListener;
 import com.facebook.imagepipeline.cache.CacheKeyFactory;
 import com.facebook.imagepipeline.common.RotationOptions;
 import com.facebook.imagepipeline.core.ImagePipeline;
@@ -31,6 +30,7 @@ import com.facebook.imagepipeline.listener.RequestListener;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.request.ImageRequestBuilder;
 import com.facebook.imagepipeline.systrace.FrescoSystrace;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -39,6 +39,7 @@ import javax.annotation.Nullable;
  *
  * <p>See {@link AbstractDraweeControllerBuilder} for more details.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class PipelineDraweeControllerBuilder
     extends AbstractDraweeControllerBuilder<
         PipelineDraweeControllerBuilder,
@@ -130,12 +131,12 @@ public class PipelineDraweeControllerBuilder
       controller.initialize(
           obtainDataSourceSupplier(controller, controllerId),
           controllerId,
+          // NULLSAFE_FIXME[Parameter Not Nullable]
           getCacheKey(),
+          // NULLSAFE_FIXME[Parameter Not Nullable]
           getCallerContext(),
-          mCustomDrawableFactories,
-          mImageOriginListener);
-      controller.initializePerformanceMonitoring(
-          mImagePerfDataListener, this, Suppliers.BOOLEAN_FALSE);
+          mCustomDrawableFactories);
+      controller.initializePerformanceMonitoring(mImagePerfDataListener, this);
       return controller;
     } finally {
       if (FrescoSystrace.isTracing()) {

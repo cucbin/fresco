@@ -7,21 +7,21 @@
 
 package com.facebook.imagepipeline.producers;
 
+import static com.facebook.common.util.UriUtil.getRealPathFromUri;
+
 import android.content.ContentResolver;
-import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.ImmutableMap;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.references.CloseableReference;
-import com.facebook.common.util.UriUtil;
+import com.facebook.fresco.middleware.HasExtraData;
 import com.facebook.imagepipeline.bitmaps.SimpleBitmapReleaser;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
@@ -61,21 +61,21 @@ public class LocalVideoThumbnailProducer implements Producer<CloseableReference<
     final ProducerListener2 listener = producerContext.getProducerListener();
     final ImageRequest imageRequest = producerContext.getImageRequest();
     producerContext.putOriginExtra("local", "video");
-    final StatefulProducerRunnable cancellableProducerRunnable =
+    final StatefulProducerRunnable<CloseableReference<CloseableImage>> cancellableProducerRunnable =
         new StatefulProducerRunnable<CloseableReference<CloseableImage>>(
             consumer, listener, producerContext, PRODUCER_NAME) {
           @Override
           protected void onSuccess(@Nullable CloseableReference<CloseableImage> result) {
             super.onSuccess(result);
             listener.onUltimateProducerReached(producerContext, PRODUCER_NAME, result != null);
-            producerContext.putOriginExtra("local");
+            producerContext.putOriginExtra("local", "video");
           }
 
           @Override
           protected void onFailure(Exception e) {
             super.onFailure(e);
             listener.onUltimateProducerReached(producerContext, PRODUCER_NAME, false);
-            producerContext.putOriginExtra("local");
+            producerContext.putOriginExtra("local", "video");
           }
 
           @Override
@@ -108,8 +108,8 @@ public class LocalVideoThumbnailProducer implements Producer<CloseableReference<
                     SimpleBitmapReleaser.getInstance(),
                     ImmutableQualityInfo.FULL_QUALITY,
                     0);
-            producerContext.setExtra(ProducerContext.ExtraKeys.IMAGE_FORMAT, "thumbnail");
-            closeableStaticBitmap.setImageExtras(producerContext.getExtras());
+            producerContext.putExtra(HasExtraData.KEY_IMAGE_FORMAT, "thumbnail");
+            closeableStaticBitmap.putExtras(producerContext.getExtras());
             return CloseableReference.<CloseableImage>of(closeableStaticBitmap);
           }
 
@@ -120,8 +120,7 @@ public class LocalVideoThumbnailProducer implements Producer<CloseableReference<
           }
 
           @Override
-          // NULLSAFE_FIXME[Inconsistent Subclass Parameter Annotation]
-          protected void disposeResult(CloseableReference<CloseableImage> result) {
+          protected void disposeResult(@Nullable CloseableReference<CloseableImage> result) {
             CloseableReference.closeSafely(result);
           }
         };
@@ -145,33 +144,7 @@ public class LocalVideoThumbnailProducer implements Producer<CloseableReference<
   @Nullable
   private String getLocalFilePath(ImageRequest imageRequest) {
     Uri uri = imageRequest.getSourceUri();
-    if (UriUtil.isLocalFileUri(uri)) {
-      return imageRequest.getSourceFile().getPath();
-    } else if (UriUtil.isLocalContentUri(uri)) {
-      String selection = null;
-      String[] selectionArgs = null;
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
-          && "com.android.providers.media.documents".equals(uri.getAuthority())) {
-        String documentId = DocumentsContract.getDocumentId(uri);
-        Preconditions.checkNotNull(documentId);
-        uri = Preconditions.checkNotNull(MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
-        selection = MediaStore.Video.Media._ID + "=?";
-        selectionArgs = new String[] {documentId.split(":")[1]};
-      }
-      Cursor cursor =
-          mContentResolver.query(
-              uri, new String[] {MediaStore.Video.Media.DATA}, selection, selectionArgs, null);
-      try {
-        if (cursor != null && cursor.moveToFirst()) {
-          return cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA));
-        }
-      } finally {
-        if (cursor != null) {
-          cursor.close();
-        }
-      }
-    }
-    return null;
+    return getRealPathFromUri(mContentResolver, uri);
   }
 
   @Nullable
